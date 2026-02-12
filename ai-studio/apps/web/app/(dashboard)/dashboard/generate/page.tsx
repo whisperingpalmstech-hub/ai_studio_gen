@@ -69,6 +69,58 @@ export default function GeneratePage() {
     const [statusMessage, setStatusMessage] = useState("");
 
     const [refreshKey, setRefreshKey] = useState(0);
+    const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+
+    // Polling fallback
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+
+        if (isGenerating && currentJobId) {
+            console.log("⏱️ Polling for job status...", currentJobId);
+            interval = setInterval(async () => {
+                const supabase = getSupabaseClient();
+                const { data: job } = await (supabase
+                    .from('jobs') as any)
+                    .select('*')
+                    .eq('id', currentJobId)
+                    .single();
+
+                if (job) {
+                    const update = job as any;
+                    console.log("📥 Job Update (Polling):", update.status, update.progress + "%");
+
+                    if (update.progress !== undefined && update.progress > progress) {
+                        setProgress(update.progress);
+                    }
+
+                    if (update.status_message) {
+                        setStatusMessage(update.status_message);
+                    } else if (update.current_node) {
+                        setStatusMessage(`Processing: ${update.current_node} (${update.progress}%)`);
+                    }
+
+                    if (update.status === 'completed') {
+                        const firstOutput = Array.isArray(update.outputs) ? update.outputs[0] : null;
+                        if (firstOutput && typeof firstOutput === 'string' && (firstOutput.startsWith('http') || firstOutput.startsWith('/'))) {
+                            setGeneratedImage(firstOutput);
+                            setIsGenerating(false);
+                            setProgress(100);
+                            setStatusMessage("Complete!");
+                            setCurrentJobId(null);
+                        }
+                    } else if (update.status === 'failed') {
+                        setIsGenerating(false);
+                        setCurrentJobId(null);
+                        alert(`Failed: ${update.error_message}`);
+                    }
+                }
+            }, 2000); // Poll every 2s
+        }
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isGenerating, currentJobId, progress]);
 
     // WebSocket
     const { status: wsStatus, lastMessage } = useWebSocket();
@@ -77,8 +129,8 @@ export default function GeneratePage() {
 
     useEffect(() => {
         const update = realtimeJobUpdate as any;
-        if (update && isGenerating) {
-            console.log("Realtime Job Update:", update);
+        if (update && isGenerating && update.id === currentJobId) {
+            console.log("⚡ Realtime Job Update:", update.status, update.progress + "%");
 
             if (update.progress !== undefined) {
                 setProgress(update.progress);
@@ -99,6 +151,7 @@ export default function GeneratePage() {
                     setProgress(100);
                     setStatusMessage("Generation Complete!");
                     setRefreshKey(prev => prev + 1);
+                    setCurrentJobId(null);
                 } else if (update.outputs && Array.isArray(update.outputs) && update.outputs.length > 0) {
                     const fetchAsset = async () => {
                         const supabase = getSupabaseClient();
@@ -114,6 +167,7 @@ export default function GeneratePage() {
                             setProgress(100);
                             setStatusMessage("Generation Complete!");
                             setRefreshKey(prev => prev + 1);
+                            setCurrentJobId(null);
                         }
                     };
                     fetchAsset();
@@ -121,10 +175,11 @@ export default function GeneratePage() {
             } else if (update.status === 'failed') {
                 setIsGenerating(false);
                 setProgress(0);
+                setCurrentJobId(null);
                 alert(`Job Failed: ${update.error_message || 'Unknown error'}`);
             }
         }
-    }, [realtimeJobUpdate, isGenerating]);
+    }, [realtimeJobUpdate, isGenerating, currentJobId]);
 
     useEffect(() => {
         if (lastMessage) {
@@ -255,6 +310,7 @@ export default function GeneratePage() {
                 setIsGenerating(false);
             } else if (data.status === "queued" || data.jobId) {
                 setStatusMessage("Job submitted to queue...");
+                if (data.jobId) setCurrentJobId(data.jobId);
                 setGeneratedImage(null);
                 setProgress(0);
             } else {
