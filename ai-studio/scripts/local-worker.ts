@@ -25,68 +25,204 @@ console.log(`📍 ComfyUI: ${COMFYUI_URL}`);
 
 // Import the workflow generator logic (Simplified for the script)
 const generateSimpleWorkflow = (params: any) => {
-    const { type, prompt, negative_prompt, width, height, steps, cfg_scale, seed, sampler, model_id } = params;
-
-    // Map sampler names to ComfyUI internal names
-    const samplerMap: Record<string, string> = {
-        "Euler a": "euler_ancestral",
-        "euler_a": "euler_ancestral",
-        "Euler": "euler",
-        "LMS": "lms",
-        "Heun": "heun",
-        "DPM2": "dpm_2",
-        "DPM2 a": "dpm_2_ancestral",
-        "DPM++ 2S a": "dpmpp_2s_ancestral",
-        "DPM++ 2M": "dpmpp_2m",
-        "DPM++ SDE": "dpmpp_sde",
-        "DPM++ 2M SDE": "dpmpp_2m_sde",
-        "DDIM": "ddim",
-        "UniPC": "uni_pc"
+    const type = params.type || "txt2img";
+    const ID = {
+        CHECKPOINT: "1",
+        VAE_LOADER: "2",
+        CLIP_LOADER: "3",
+        PROMPT_POS: "4",
+        PROMPT_NEG: "5",
+        LATENT: "6",
+        SAMPLER: "7",
+        VAE_DECODE: "8",
+        VHS_VIDEO_COMBINE: "9",
+        LOAD_IMAGE: "10",
+        CLIP_VISION: "11",
+        CLIP_VISION_ENCODE: "12",
+        WAN_I2V: "13",
+        SAVE_PREVIEW: "14"
     };
 
-    const comfySampler = samplerMap[sampler] || "euler";
-    // Default model if nothing provided
-    let ckptName = model_id || "sd_xl_base_1.0.safetensors";
+    const workflow: Record<string, any> = {};
 
-    // Detect video models or other specialized models and adjust workflow if needed
-    // For now, just ensure the checkpoint exists in a known good set or use a default
-    const knownGoodCheckpoints = [
-        'realistic-vision-inpaint.safetensors',
-        'sd-v1-5-inpainting.safetensors',
-        'sd_xl_base_1.0.safetensors',
-        'svd.safetensors',
-        'svd_xt.safetensors',
-        'v1-5-pruned-emaonly.safetensors'
-    ];
+    // Standard Image Generation
+    if (type === "txt2img" || type === "img2img" || type === "inpaint" || type === "upscale") {
+        const ID_OLD = {
+            CHECKPOINT: "1",
+            PROMPT_POS: "2",
+            PROMPT_NEG: "3",
+            LATENT_EMPTY: "4",
+            SAMPLER: "5",
+            VAE_DECODE: "6",
+            SAVE_IMAGE: "7",
+            LOAD_IMAGE: "8",
+            VAE_ENCODE: "9",
+            LOAD_MASK: "10",
+            VAE_ENCODE_INPAINT: "11"
+        };
 
-    if (!knownGoodCheckpoints.includes(ckptName)) {
-        console.warn(`⚠️ Model "${ckptName}" not found in ComfyUI list. Falling back to default.`);
-        ckptName = "sd_xl_base_1.0.safetensors";
+        const ckptName = params.model_id || "sd_xl_base_1.0.safetensors";
+
+        workflow[ID_OLD.CHECKPOINT] = {
+            class_type: "CheckpointLoaderSimple",
+            inputs: { ckpt_name: ckptName }
+        };
+
+        workflow[ID_OLD.PROMPT_POS] = {
+            class_type: "CLIPTextEncode",
+            inputs: { text: params.prompt || "", clip: [ID_OLD.CHECKPOINT, 1] }
+        };
+
+        workflow[ID_OLD.PROMPT_NEG] = {
+            class_type: "CLIPTextEncode",
+            inputs: { text: params.negative_prompt || "", clip: [ID_OLD.CHECKPOINT, 1] }
+        };
+
+        workflow[ID_OLD.VAE_DECODE] = {
+            class_type: "VAEDecode",
+            inputs: { samples: [ID_OLD.SAMPLER, 0], vae: [ID_OLD.CHECKPOINT, 2] }
+        };
+
+        workflow[ID_OLD.SAVE_IMAGE] = {
+            class_type: "SaveImage",
+            inputs: { filename_prefix: "AiStudio", images: [ID_OLD.VAE_DECODE, 0] }
+        };
+
+        let latentNodeId = ID_OLD.LATENT_EMPTY;
+        let denoise = 1.0;
+
+        if (type === "txt2img") {
+            workflow[ID_OLD.LATENT_EMPTY] = {
+                class_type: "EmptyLatentImage",
+                inputs: {
+                    width: params.width || 1024,
+                    height: params.height || 1024,
+                    batch_size: 1
+                }
+            };
+        } else if (type === "img2img" || type === "upscale") {
+            // Standard img2img logic
+            denoise = params.denoising_strength ?? 0.75;
+            // ... (rest of simple img2img if needed, keeping it compact for worker)
+        }
+
+        const samplerMap: Record<string, string> = {
+            "Euler a": "euler_ancestral",
+            "euler_a": "euler_ancestral",
+            "Euler": "euler",
+            "DPM++ 2M": "dpmpp_2m",
+            "UniPC": "uni_pc"
+        };
+        const comfySampler = samplerMap[params.sampler] || "euler";
+
+        workflow[ID_OLD.SAMPLER] = {
+            class_type: "KSampler",
+            inputs: {
+                model: [ID_OLD.CHECKPOINT, 0],
+                positive: [ID_OLD.PROMPT_POS, 0],
+                negative: [ID_OLD.PROMPT_NEG, 0],
+                latent_image: [latentNodeId, 0],
+                seed: params.seed && params.seed !== -1 ? params.seed : Math.floor(Math.random() * 10000000),
+                steps: params.steps || 20,
+                cfg: params.cfg_scale || 7.0,
+                sampler_name: comfySampler,
+                scheduler: "normal",
+                denoise: denoise
+            }
+        };
+    }
+    // Wan 2.1 Video Generation
+    else if (type === "t2v" || type === "i2v") {
+        let videoModel = params.model_id;
+        if (!videoModel || !videoModel.toLowerCase().includes('wan')) {
+            videoModel = (type === "t2v" ? "wan2.1_t2v_1.3B_bf16.safetensors" : "wan2.1_i2v_720p_14B_bf16.safetensors");
+        }
+
+        workflow[ID.CHECKPOINT] = {
+            class_type: "UNETLoader",
+            inputs: { unet_name: videoModel, weight_dtype: "default" }
+        };
+
+        workflow[ID.VAE_LOADER] = {
+            class_type: "VAELoader",
+            inputs: { vae_name: "wan_2.1_vae.safetensors" }
+        };
+
+        workflow[ID.CLIP_LOADER] = {
+            class_type: "CLIPLoader",
+            inputs: { clip_name: "umt5_xxl_fp8_e4m3fn_scaled.safetensors", type: "wan" }
+        };
+
+        workflow[ID.PROMPT_POS] = {
+            class_type: "CLIPTextEncode",
+            inputs: { text: params.prompt || "", clip: [ID.CLIP_LOADER, 0] }
+        };
+
+        workflow[ID.PROMPT_NEG] = {
+            class_type: "CLIPTextEncode",
+            inputs: { text: params.negative_prompt || "blurry, low quality, distorted", clip: [ID.CLIP_LOADER, 0] }
+        };
+
+        if (type === "t2v") {
+            workflow[ID.LATENT] = {
+                class_type: "EmptyHunyuanLatentVideo",
+                inputs: {
+                    width: params.width || 832,
+                    height: params.height || 480,
+                    length: params.video_frames || 81,
+                    batch_size: 1
+                }
+            };
+        } else {
+            // i2v logic...
+        }
+
+        workflow[ID.SAMPLER] = {
+            class_type: "KSampler",
+            inputs: {
+                model: [ID.CHECKPOINT, 0],
+                positive: [ID.PROMPT_POS, 0],
+                negative: [ID.PROMPT_NEG, 0],
+                latent_image: [ID.LATENT, 0],
+                seed: params.seed && params.seed !== -1 ? params.seed : Math.floor(Math.random() * 10000000),
+                steps: params.steps || 30,
+                cfg: params.cfg_scale || 6.0,
+                sampler_name: "uni_pc_bh2",
+                scheduler: "simple",
+                denoise: 1.0
+            }
+        };
+
+        workflow[ID.VAE_DECODE] = {
+            class_type: "VAEDecode",
+            inputs: { samples: [ID.SAMPLER, 0], vae: [ID.VAE_LOADER, 0] }
+        };
+
+        workflow[ID.VHS_VIDEO_COMBINE] = {
+            class_type: "VHS_VideoCombine",
+            inputs: {
+                images: [ID.VAE_DECODE, 0],
+                frame_rate: params.fps || 16,
+                loop_count: 0,
+                filename_prefix: "AiStudio_Video",
+                format: "video/h264-mp4",
+                pix_fmt: "yuv420p",
+                crf: 19,
+                save_output: true
+            }
+        };
+
+        // Single frame preview
+        workflow[ID.SAVE_PREVIEW] = {
+            class_type: "SaveImage",
+            inputs: {
+                filename_prefix: "AiStudio_Preview",
+                images: [ID.VAE_DECODE, 0]
+            }
+        };
     }
 
-    return {
-        "3": {
-            "class_type": "KSampler",
-            "inputs": {
-                "cfg": cfg_scale || 7.5,
-                "denoise": 1,
-                "latent_image": ["5", 0],
-                "model": ["4", 0],
-                "negative": ["7", 0],
-                "positive": ["6", 0],
-                "sampler_name": comfySampler,
-                "scheduler": "normal",
-                "seed": seed || Math.floor(Math.random() * 1000000),
-                "steps": steps || 20
-            }
-        },
-        "4": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": ckptName } },
-        "5": { "class_type": "EmptyLatentImage", "inputs": { "batch_size": 1, "height": height || 1024, "width": width || 1024 } },
-        "6": { "class_type": "CLIPTextEncode", "inputs": { "clip": ["4", 1], "text": prompt } },
-        "7": { "class_type": "CLIPTextEncode", "inputs": { "clip": ["4", 1], "text": negative_prompt || "" } },
-        "8": { "class_type": "VAEDecode", "inputs": { "samples": ["3", 0], "vae": ["4", 2] } },
-        "9": { "class_type": "SaveImage", "inputs": { "filename_prefix": "AiStudio", "images": ["8", 0] } }
-    };
+    return workflow;
 };
 
 // Main processing loop
