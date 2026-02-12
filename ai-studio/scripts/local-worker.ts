@@ -174,16 +174,44 @@ const generateSimpleWorkflow = (params: any) => {
                 }
             };
         } else {
-            // i2v logic...
+            // i2v
+            workflow[ID.LOAD_IMAGE] = {
+                class_type: "LoadImage",
+                inputs: { image: params.image_url || params.image || "input.png", upload: "image" }
+            };
+
+            workflow[ID.CLIP_VISION] = {
+                class_type: "CLIPVisionLoader",
+                inputs: { clip_name: "clip_vision_h.safetensors" }
+            };
+
+            workflow[ID.CLIP_VISION_ENCODE] = {
+                class_type: "CLIPVisionEncode",
+                inputs: { clip_vision: [ID.CLIP_VISION, 0], image: [ID.LOAD_IMAGE, 0] }
+            };
+
+            workflow[ID.WAN_I2V] = {
+                class_type: "WanImageToVideo",
+                inputs: {
+                    positive: [ID.PROMPT_POS, 0],
+                    negative: [ID.PROMPT_NEG, 0],
+                    vae: [ID.VAE_LOADER, 0],
+                    start_image: [ID.LOAD_IMAGE, 0],
+                    clip_vision_output: [ID.CLIP_VISION_ENCODE, 0],
+                    width: params.width || 832,
+                    height: params.height || 480,
+                    length: params.video_frames || 81
+                }
+            };
         }
 
         workflow[ID.SAMPLER] = {
             class_type: "KSampler",
             inputs: {
                 model: [ID.CHECKPOINT, 0],
-                positive: [ID.PROMPT_POS, 0],
-                negative: [ID.PROMPT_NEG, 0],
-                latent_image: [ID.LATENT, 0],
+                positive: type === "t2v" ? [ID.PROMPT_POS, 0] : [ID.WAN_I2V, 0],
+                negative: type === "t2v" ? [ID.PROMPT_NEG, 0] : [ID.WAN_I2V, 1],
+                latent_image: type === "t2v" ? [ID.LATENT, 0] : [ID.WAN_I2V, 2],
                 seed: params.seed && params.seed !== -1 ? params.seed : Math.floor(Math.random() * 10000000),
                 steps: params.steps || 30,
                 cfg: params.cfg_scale || 6.0,
