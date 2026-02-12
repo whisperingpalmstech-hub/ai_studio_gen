@@ -63,8 +63,8 @@ export default function ModelsPage() {
 
         const { data: { user } } = await supabase.auth.getUser();
 
-        let query = supabase
-            .from("models")
+        let query = (supabase
+            .from("models") as any)
             .select("*")
             .order("created_at", { ascending: false });
 
@@ -115,7 +115,7 @@ export default function ModelsPage() {
 
             if (!user) throw new Error("Authentication required");
 
-            const { error } = await supabase.from("models").insert({
+            const { error } = await (supabase.from("models") as any).insert({
                 name: newModel.name,
                 type: newModel.type,
                 base_model: newModel.base_model,
