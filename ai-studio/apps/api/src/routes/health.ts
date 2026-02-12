@@ -3,7 +3,7 @@ import { Router } from "express";
 const router = Router();
 
 // Health check endpoint
-router.get("/", (req, res) => {
+router.get("/", (req: any, res: any) => {
     res.json({
         status: "healthy",
         timestamp: new Date().toISOString(),
@@ -13,7 +13,7 @@ router.get("/", (req, res) => {
 });
 
 // Readiness check (for k8s)
-router.get("/ready", async (req, res) => {
+router.get("/ready", async (req: any, res: any) => {
     // TODO: Add database and Redis connectivity checks
     res.json({
         status: "ready",
@@ -25,7 +25,7 @@ router.get("/ready", async (req, res) => {
 });
 
 // Liveness check (for k8s)
-router.get("/live", (req, res) => {
+router.get("/live", (req: any, res: any) => {
     res.json({
         status: "live",
     });

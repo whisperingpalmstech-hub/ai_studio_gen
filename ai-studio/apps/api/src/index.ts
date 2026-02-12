@@ -38,7 +38,7 @@ app.use("/api/v1/models", authMiddleware, modelsRouter);
 app.use("/api/v1/users", authMiddleware, usersRouter);
 
 // 404 handler
-app.use((req, res) => {
+app.use((req: any, res: any) => {
     res.status(404).json({
         error: "Not Found",
         message: `Route ${req.method} ${req.path} not found`,
