@@ -36,7 +36,14 @@ import {
     SVDLoaderNode,
     VideoLinearCFGNode,
     ClipVisionLoaderNode,
-    VideoCombineNode
+    VideoCombineNode,
+    WanLoaderNode,
+    UNETLoaderNode,
+    CLIPLoaderNode,
+    VAELoaderNode,
+    CLIPVisionEncodeNode,
+    WanVideoSamplerNode,
+    WanEmptyLatentNode
 } from '@/components/workflow/CustomNodes';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useWebSocket } from '@/lib/useWebSocket';
@@ -60,7 +67,14 @@ const nodeTypes = {
     svdLoader: SVDLoaderNode,
     videoLinearCFG: VideoLinearCFGNode,
     videoCombine: VideoCombineNode,
-    clipVision: ClipVisionLoaderNode
+    clipVision: ClipVisionLoaderNode,
+    wanI2V: WanLoaderNode,
+    unetLoader: UNETLoaderNode,
+    clipLoader: CLIPLoaderNode,
+    vaeLoader: VAELoaderNode,
+    clipVisionEncode: CLIPVisionEncodeNode,
+    wanT2V: WanVideoSamplerNode,
+    wanEmptyLatent: WanEmptyLatentNode
 };
 
 const initialNodes: Node[] = [
@@ -139,16 +153,21 @@ function WorkflowEditorContent() {
             setExecutingNodeId(null);
 
             if (lastMessage.results) {
-                // Find SaveImage nodes (our 'output' type)
-                // results is node-keyed: { nodeId: [{ url, filename, ... }] }
                 setNodes((nds) => nds.map((node) => {
                     const nodeResultArray = lastMessage.results[node.id];
                     if (nodeResultArray && nodeResultArray.length > 0) {
-                        const imageUrl = nodeResultArray[0].url;
-                        return {
-                            ...node,
-                            data: { ...node.data, image: imageUrl }
-                        };
+                        const result = nodeResultArray[0];
+                        if (result.type === 'video') {
+                            return {
+                                ...node,
+                                data: { ...node.data, preview: result.url }
+                            };
+                        } else {
+                            return {
+                                ...node,
+                                data: { ...node.data, image: result.url }
+                            };
+                        }
                     }
                     return node;
                 }));

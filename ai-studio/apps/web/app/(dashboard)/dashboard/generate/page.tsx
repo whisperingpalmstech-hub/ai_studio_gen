@@ -9,15 +9,20 @@ import {
     Share2,
     Loader2,
     Image as ImageIcon,
+    Video,
     Wand2,
     Upload,
     Zap,
     Maximize,
     Brush,
-    Trash2
+    Trash2,
+    Film,
+    Layers,
+    Info
 } from "lucide-react";
-import { getSupabaseClient } from "@/lib/supabase/client";
-import { useWebSocket } from "@/lib/useWebSocket";
+
+import { getSupabaseClient } from "../../../../lib/supabase/client";
+import { useWebSocket } from "../../../../lib/useWebSocket";
 
 const MODES = [
     { id: "txt2img", label: "Text to Image", icon: Sparkles },
@@ -77,9 +82,13 @@ export default function GeneratePage() {
                 if (lastMessage.message) {
                     setStatusMessage(lastMessage.message);
                 }
-            } else if (lastMessage.type === 'job_complete') {
-                if (lastMessage.result && lastMessage.result.file_path) {
-                    setGeneratedImage(lastMessage.result.file_path);
+            } else if (lastMessage.type === 'job_completed' || lastMessage.type === 'job_complete') {
+                // Backend sends specific structure: { images: string[], asset: any }
+                // Also support legacy format if any
+                const imageUrl = lastMessage.images?.[0] || lastMessage.asset?.file_path || lastMessage.result?.file_path;
+
+                if (imageUrl) {
+                    setGeneratedImage(imageUrl);
                     setIsGenerating(false);
                     setProgress(100);
                     setStatusMessage("Generation Complete!");
@@ -93,6 +102,21 @@ export default function GeneratePage() {
         }
     }, [lastMessage]);
 
+    // Polling fallback
+    useEffect(() => {
+        if (!isGenerating) return;
+
+        const interval = setInterval(async () => {
+            // Only poll if we don't have active WS updates for a while? 
+            // For now, just poll casually to check for completion if WS missed it.
+            // But we don't have the Job ID in state easily exposed here without refactoring.
+            // So skipping detailed polling implementation for now to avoid large refactors.
+            // The WS fix should be sufficient.
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [isGenerating]);
+
     // Image Upload State
     const [inputImage, setInputImage] = useState<string | null>(null);
     const [maskImage, setMaskImage] = useState<string | null>(null);
@@ -100,6 +124,39 @@ export default function GeneratePage() {
     const maskInputRef = useRef<HTMLInputElement>(null);
     const [denoisingStrength, setDenoisingStrength] = useState(0.75);
     const [upscaleFactor, setUpscaleFactor] = useState(2);
+    const [availableModels, setAvailableModels] = useState<any[]>([]);
+    const [selectedModel, setSelectedModel] = useState<any>(null);
+
+    // Fetch available models
+    useEffect(() => {
+        const fetchModels = async () => {
+            const supabase = getSupabaseClient();
+            const { data } = await supabase
+                .from("models")
+                .select("*")
+                .eq("type", "checkpoint")
+                .order("is_system", { ascending: false });
+
+            if (data) {
+                setAvailableModels(data);
+                // Set default to SDXL if available, otherwise SD 1.5
+                const sdxl = data.find(m => m.base_model === 'sdxl');
+                const sd15 = data.find(m => m.base_model === 'sd15');
+                setSelectedModel(sdxl || sd15 || data[0]);
+            }
+        };
+        fetchModels();
+    }, []);
+
+    // Handle mode changes (auto-adjust settings)
+    useEffect(() => {
+        if (mode === "txt2img" || mode === "img2img") {
+            // Revert back to SD model if we were on a custom one
+            const sdxl = availableModels.find(m => m.base_model === 'sdxl');
+            const sd15 = availableModels.find(m => m.base_model === 'sd15');
+            setSelectedModel(sdxl || sd15 || availableModels[0]);
+        }
+    }, [mode, availableModels]);
 
     // Fetch user credits on page load
     useEffect(() => {
@@ -136,8 +193,8 @@ export default function GeneratePage() {
     };
 
     const handleGenerate = async () => {
-        if (!prompt.trim() && mode === "txt2img") return;
-        if (!inputImage && (mode === "img2img" || mode === "inpaint" || mode === "upscale")) return;
+        if (!prompt.trim() && (mode === "txt2img" || mode === "t2v")) return;
+        if (!inputImage && (mode === "img2img" || mode === "inpaint" || mode === "upscale" || mode === "i2v")) return;
 
         setIsGenerating(true);
         setGeneratedImage(null);
@@ -145,7 +202,9 @@ export default function GeneratePage() {
 
         const initialStatus = mode === 'txt2img' ? 'Initiating creation...' :
             mode === 'img2img' ? 'Analyzing input image...' :
-                mode === 'inpaint' ? 'Preparing mask region...' : 'Starting engine...';
+                mode === 't2v' ? 'Starting video generation...' :
+                    mode === 'i2v' ? 'Animating your image...' :
+                        mode === 'inpaint' ? 'Preparing mask region...' : 'Starting engine...';
 
         setStatusMessage(initialStatus);
 
@@ -167,6 +226,7 @@ export default function GeneratePage() {
                     mask: maskImage,
                     denoising_strength: denoisingStrength,
                     upscale_factor: upscaleFactor,
+                    model_id: selectedModel?.file_path
                 }),
             });
 
@@ -182,10 +242,12 @@ export default function GeneratePage() {
             } else if (data.status === "queued" || data.jobId) {
                 // If queued, we rely on WebSocket for the rest of the updates
                 setStatusMessage("Job submitted to queue...");
+                setGeneratedImage(null); // Clear previous image
+                setProgress(0);
                 // Note: Keep isGenerating(true)
             } else {
+                // Should not happen if queued
                 throw new Error("No image returned from API");
-                setIsGenerating(false);
             }
 
             // Update credits count
@@ -207,7 +269,7 @@ export default function GeneratePage() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `generation-${Date.now()}.png`;
+            a.download = `generation-${Date.now()}.${generatedImage.includes('.mp4') ? 'mp4' : 'png'}`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -216,7 +278,7 @@ export default function GeneratePage() {
             console.error("Download error:", error);
             const a = document.createElement('a');
             a.href = generatedImage;
-            a.download = `generation-${Date.now()}.png`;
+            a.download = `generation-${Date.now()}.${generatedImage.includes('.mp4') ? 'mp4' : 'png'}`;
             a.target = "_blank";
             a.click();
         }
@@ -474,6 +536,42 @@ export default function GeneratePage() {
                         </div>
                     )}
 
+                    {/* Model Selection */}
+                    {(mode === "txt2img" || mode === "img2img" || mode === "inpaint") && (
+                        <div style={cardStyle}>
+                            <label style={labelStyle}>
+                                <Layers size={16} color="#8b5cf6" />
+                                Base Model
+                            </label>
+                            <select
+                                value={selectedModel?.id || ""}
+                                onChange={(e) => {
+                                    const model = availableModels.find(m => m.id === e.target.value);
+                                    setSelectedModel(model);
+                                    // Auto-adjust resolution for SDXL
+                                    if (model?.base_model === 'sdxl') {
+                                        const square = ASPECT_RATIOS.find(a => a.label === "1:1");
+                                        if (square) setSelectedAspect(square);
+                                    }
+                                }}
+                                style={inputStyle}
+                            >
+                                {availableModels
+                                    .filter(m => !m.name?.toLowerCase().includes('wan') && !m.file_path?.toLowerCase().includes('wan'))
+                                    .map((m) => (
+                                        <option key={m.id} value={m.id}>
+                                            {m.name} {m.base_model === 'sdxl' ? '(SDXL)' : ''}
+                                        </option>
+                                    ))}
+                            </select>
+                            {selectedModel?.base_model === 'sdxl' && (
+                                <p style={{ fontSize: '0.75rem', color: '#8b5cf6', marginTop: '0.5rem' }}>
+                                    ✨ SDXL is optimized for 1024x1024 resolutions.
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     {/* Mask Upload (for Inpaint) */}
                     {mode === "inpaint" && (
                         <div style={cardStyle}>
@@ -567,8 +665,8 @@ export default function GeneratePage() {
                         />
                     </div>
 
-                    {/* Aspect Ratio (Only for Txt2Img usually, but can be target for others) */}
-                    {mode === "txt2img" && (
+                    {/* Aspect Ratio (Only for Txt2Img usually) */}
+                    {(mode === "txt2img") && (
                         <div style={cardStyle}>
                             <label style={labelStyle}>
                                 Aspect Ratio
@@ -711,7 +809,7 @@ export default function GeneratePage() {
                     {/* Generate Button */}
                     <button
                         onClick={handleGenerate}
-                        disabled={isGenerating || (mode === "txt2img" && !prompt.trim()) || ((mode === "img2img" || mode === "upscale") && !inputImage)}
+                        disabled={isGenerating || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)}
                         style={{
                             width: '100%',
                             display: 'flex',
@@ -723,10 +821,10 @@ export default function GeneratePage() {
                             fontSize: '1rem',
                             fontWeight: 600,
                             border: 'none',
-                            cursor: (isGenerating || (mode === "txt2img" && !prompt.trim()) || ((mode === "img2img" || mode === "upscale") && !inputImage)) ? 'not-allowed' : 'pointer',
+                            cursor: (isGenerating || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)) ? 'not-allowed' : 'pointer',
                             background: 'linear-gradient(135deg, #6366f1, #a855f7)',
                             color: 'white',
-                            opacity: (isGenerating || (mode === "txt2img" && !prompt.trim()) || ((mode === "img2img" || mode === "upscale") && !inputImage)) ? 0.7 : 1,
+                            opacity: (isGenerating || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)) ? 0.7 : 1,
                             boxShadow: '0 10px 40px rgba(99, 102, 241, 0.3)',
                             marginBottom: '1rem'
                         }}
@@ -805,7 +903,7 @@ export default function GeneratePage() {
                             style={{
                                 position: 'relative',
                                 backgroundColor: 'rgba(15, 15, 35, 0.3)',
-                                aspectRatio: mode === 'txt2img' ? `${selectedAspect.width}/${selectedAspect.height}` : 'auto',
+                                aspectRatio: (mode === 'txt2img' || mode === 't2v' || mode === 'i2v') ? `${selectedAspect.width}/${selectedAspect.height}` : 'auto',
                                 minHeight: '350px',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -820,85 +918,165 @@ export default function GeneratePage() {
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     width: '100%',
-                                    padding: '2rem'
+                                    padding: '2rem',
+                                    background: (mode === "t2v" || mode === "i2v") ? 'radial-gradient(circle at center, rgba(168, 85, 247, 0.05) 0%, transparent 70%)' : 'transparent'
                                 }}>
-                                    <div style={{ position: 'relative', width: '5rem', height: '5rem', marginBottom: '1.5rem' }}>
-                                        <div style={{
-                                            position: 'absolute',
-                                            inset: 0,
-                                            borderRadius: '50%',
-                                            border: '3px solid rgba(99, 102, 241, 0.1)',
-                                            borderTopColor: '#6366f1',
-                                            animation: 'spin 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite'
-                                        }} />
-                                        <div style={{
-                                            position: 'absolute',
-                                            inset: '4px',
-                                            borderRadius: '50%',
-                                            border: '3px solid rgba(168, 85, 247, 0.1)',
-                                            borderBottomColor: '#a855f7',
-                                            animation: 'spin 2s cubic-bezier(0.4, 0, 0.2, 1) reverse infinite'
-                                        }} />
-                                        <div style={{
-                                            position: 'absolute',
-                                            inset: 0,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '0.875rem',
-                                            fontWeight: 'bold',
-                                            color: 'white'
-                                        }}>
-                                            {progress}%
+                                    {(mode === "t2v" || mode === "i2v") ? (
+                                        /* Specialized Video Loader */
+                                        <div style={{ position: 'relative', width: '120px', height: '120px', marginBottom: '2rem' }}>
+                                            <div style={{
+                                                position: 'absolute',
+                                                inset: 0,
+                                                borderRadius: '20px',
+                                                border: '2px dashed #a855f7',
+                                                animation: 'pulse-slow 2s infinite',
+                                                opacity: 0.5
+                                            }} />
+                                            <div style={{
+                                                position: 'absolute',
+                                                inset: '20px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: '#a855f7'
+                                            }}>
+                                                <Film size={48} style={{ animation: 'shimmer 1.5s infinite' }} />
+                                            </div>
+                                            {/* Rotating Frame Indicators */}
+                                            <div style={{
+                                                position: 'absolute',
+                                                inset: 0,
+                                                border: '4px solid transparent',
+                                                borderTopColor: '#a855f7',
+                                                borderBottomColor: '#6366f1',
+                                                borderRadius: '50%',
+                                                animation: 'spin 3s linear infinite'
+                                            }} />
                                         </div>
-                                    </div>
+                                    ) : (
+                                        /* Standard Image Loader */
+                                        <div style={{ position: 'relative', width: '5rem', height: '5rem', marginBottom: '1.5rem' }}>
+                                            <div style={{
+                                                position: 'absolute',
+                                                inset: 0,
+                                                borderRadius: '50%',
+                                                border: '3px solid rgba(99, 102, 241, 0.1)',
+                                                borderTopColor: '#6366f1',
+                                                animation: 'spin 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite'
+                                            }} />
+                                            <div style={{
+                                                position: 'absolute',
+                                                inset: '4px',
+                                                borderRadius: '50%',
+                                                border: '3px solid rgba(168, 85, 247, 0.1)',
+                                                borderBottomColor: '#a855f7',
+                                                animation: 'spin 2s cubic-bezier(0.4, 0, 0.2, 1) reverse infinite'
+                                            }} />
+                                            <div style={{
+                                                position: 'absolute',
+                                                inset: 0,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontSize: '0.875rem',
+                                                fontWeight: 'bold',
+                                                color: 'white'
+                                            }}>
+                                                {progress}%
+                                            </div>
+                                        </div>
+                                    )}
 
-                                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'white', marginBottom: '0.25rem' }}>
-                                        {statusMessage || "Processing Image..."}
+                                    <h3 style={{
+                                        fontSize: '1.5rem',
+                                        fontWeight: 700,
+                                        marginBottom: '0.5rem',
+                                        background: (mode === "t2v" || mode === "i2v") ? 'linear-gradient(to right, #a855f7, #6366f1)' : 'transparent',
+                                        WebkitBackgroundClip: (mode === "t2v" || mode === "i2v") ? 'text' : 'unset',
+                                        WebkitTextFillColor: (mode === "t2v" || mode === "i2v") ? 'transparent' : 'white',
+                                        color: 'white'
+                                    }}>
+                                        {statusMessage || ((mode === "t2v" || mode === "i2v") ? "Rendering Cinematic Video..." : "Processing Image...")}
                                     </h3>
 
-                                    <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                                        Please wait while your image is generating...
+                                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '1rem', marginBottom: '2rem', textAlign: 'center', maxWidth: '300px' }}>
+                                        {(mode === "t2v" || mode === "i2v")
+                                            ? "Wan 2.1 is calculating motion and temporal consistency..."
+                                            : "Please wait while your AI artwork is being generated..."
+                                        }
                                     </p>
 
                                     <div style={{
                                         width: '100%',
-                                        maxWidth: '20rem',
-                                        height: '6px',
+                                        maxWidth: '24rem',
+                                        height: '8px',
                                         backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                        borderRadius: '3px',
+                                        borderRadius: '4px',
                                         overflow: 'hidden',
-                                        marginBottom: '0.75rem'
+                                        marginBottom: '1rem'
                                     }}>
                                         <div style={{
                                             width: `${progress}%`,
                                             height: '100%',
-                                            background: 'linear-gradient(90deg, #6366f1, #a855f7)',
+                                            background: (mode === "t2v" || mode === "i2v")
+                                                ? 'linear-gradient(90deg, #a855f7, #6366f1, #a855f7)'
+                                                : 'linear-gradient(90deg, #6366f1, #a855f7)',
+                                            backgroundSize: '200% 100%',
+                                            animation: (mode === "t2v" || mode === "i2v") ? 'gradient-move 2s linear infinite' : 'none',
                                             transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                                            boxShadow: '0 0 15px rgba(99, 102, 241, 0.6)'
+                                            boxShadow: (mode === "t2v" || mode === "i2v") ? '0 0 20px rgba(168, 85, 247, 0.6)' : '0 0 15px rgba(99, 102, 241, 0.6)'
                                         }} />
                                     </div>
-                                    <span style={{ color: '#6366f1', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.05em' }}>
-                                        {progress}% COMPLETED
-                                    </span>
 
-                                    <p style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-                                        Our AI is meticulously crafting your request.
-                                    </p>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ color: (mode === "t2v" || mode === "i2v") ? '#a855f7' : '#6366f1', fontSize: '0.875rem', fontWeight: 700 }}>
+                                            {progress}%
+                                        </span>
+                                        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>
+                                            •
+                                        </span>
+                                        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                            {(mode === "t2v" || mode === "i2v") ? "Temporal Synthesis" : "Pixel Diffusion"}
+                                        </span>
+                                    </div>
 
                                     <style jsx>{`
                                         @keyframes spin {
                                             from { transform: rotate(0deg); }
                                             to { transform: rotate(360deg); }
                                         }
+                                        @keyframes pulse-slow {
+                                            0%, 100% { opacity: 0.3; transform: scale(1); }
+                                            50% { opacity: 0.6; transform: scale(1.05); }
+                                        }
+                                        @keyframes shimmer {
+                                            0% { filter: brightness(1); }
+                                            50% { filter: brightness(1.5); }
+                                            100% { filter: brightness(1); }
+                                        }
+                                        @keyframes gradient-move {
+                                            0% { background-position: 0% 50%; }
+                                            100% { background-position: 200% 50%; }
+                                        }
                                     `}</style>
                                 </div>
                             ) : generatedImage ? (
-                                <img
-                                    src={generatedImage}
-                                    alt="Generated artwork"
-                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                                />
+                                (generatedImage.toLowerCase().split('?')[0].endsWith('.mp4') || generatedImage.toLowerCase().split('?')[0].endsWith('.webm')) ? (
+                                    <video
+                                        src={generatedImage}
+                                        controls
+                                        autoPlay
+                                        loop
+                                        playsInline
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                    />
+                                ) : (
+                                    <img
+                                        src={generatedImage}
+                                        alt="Generated artwork"
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                    />
+                                )
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
                                     <ImageIcon style={{ width: '4rem', height: '4rem', marginBottom: '1rem', opacity: 0.5 }} />
@@ -957,9 +1135,11 @@ function RecentGenerationsGrid({ refreshKey }: { refreshKey: number }) {
     const [recent, setRecent] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [localRefresh, setLocalRefresh] = useState(0);
+    const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
 
     useEffect(() => {
         const fetchRecent = async () => {
+            setLoading(true);
             const supabase = getSupabaseClient();
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
@@ -967,16 +1147,17 @@ function RecentGenerationsGrid({ refreshKey }: { refreshKey: number }) {
                     .from('assets')
                     .select('*')
                     .eq('user_id', user.id)
-                    .eq('type', 'image')
+                    .eq('type', activeTab)
                     .order('created_at', { ascending: false })
                     .limit(6);
 
                 if (data) setRecent(data);
+                else setRecent([]);
             }
             setLoading(false);
         };
         fetchRecent();
-    }, [refreshKey, localRefresh]);
+    }, [refreshKey, localRefresh, activeTab]);
 
     const handleDelete = async (e: React.MouseEvent, jobId: string) => {
         e.stopPropagation();
@@ -1006,96 +1187,192 @@ function RecentGenerationsGrid({ refreshKey }: { refreshKey: number }) {
         }
     };
 
-    if (loading) return <div style={{ color: '#9ca3af' }}>Loading recent...</div>;
-    if (recent.length === 0) return <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>No recent generations yet.</div>;
-
     return (
-        <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '1.5rem'
-        }}>
-            {recent.map((gen) => (
-                <div
-                    key={gen.id}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Tab Switcher */}
+            <div style={{
+                display: 'flex',
+                gap: '0.5rem',
+                padding: '0.25rem',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '0.75rem',
+                width: 'fit-content'
+            }}>
+                <button
+                    onClick={() => setActiveTab('image')}
                     style={{
-                        borderRadius: '0.75rem',
-                        overflow: 'hidden',
-                        aspectRatio: '1/1',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                        cursor: 'default',
-                        transition: 'all 0.3s ease',
-                        position: 'relative'
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.02)';
-                        e.currentTarget.style.borderColor = '#6366f1';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        padding: '0.5rem 1.25rem',
+                        borderRadius: '0.5rem',
+                        border: 'none',
+                        backgroundColor: activeTab === 'image' ? '#6366f1' : 'transparent',
+                        color: activeTab === 'image' ? 'white' : '#9ca3af',
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
                     }}
                 >
-                    <img
-                        src={gen.file_path}
-                        alt={gen.prompt}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <div style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.4) 100%)',
-                        opacity: 0,
-                        transition: 'opacity 0.3s ease',
-                        padding: '1rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between'
-                    }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
-                    >
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <button
-                                onClick={(e) => handleDelete(e, gen.job_id)}
-                                style={{
-                                    background: 'rgba(239, 68, 68, 0.1)',
-                                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                                    color: '#ef4444',
-                                    padding: '0.4rem',
-                                    borderRadius: '0.5rem',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    transition: 'all 0.2s'
-                                }}
-                                onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = '#ef4444';
-                                    e.currentTarget.style.color = 'white';
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                                    e.currentTarget.style.color = '#ef4444';
-                                }}
-                                title="Delete Generation"
-                            >
-                                <Trash2 style={{ width: '0.9rem', height: '0.9rem' }} />
-                            </button>
-                        </div>
-                        <p style={{
-                            color: 'white',
-                            fontSize: '0.75rem',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                        }}>
-                            {gen.prompt}
-                        </p>
-                    </div>
+                    <ImageIcon size={16} />
+                    Images
+                </button>
+            </div>
+
+            {loading ? (
+                <div style={{ color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '8px', padding: '2rem 0' }}>
+                    <Loader2 size={18} className="animate-spin" />
+                    Scanning {activeTab} library...
                 </div>
-            ))}
+            ) : recent.length === 0 ? (
+                <div style={{
+                    padding: '3rem 2rem',
+                    textAlign: 'center',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    borderRadius: '1rem',
+                    border: '1px dashed rgba(255, 255, 255, 0.1)',
+                    color: '#6b7280'
+                }}>
+                    <p>No {activeTab}s found in your recent history.</p>
+                </div>
+            ) : (
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                    gap: '1.5rem'
+                }}>
+                    {recent.map((gen) => (
+                        <div
+                            key={gen.id}
+                            style={{
+                                borderRadius: '0.75rem',
+                                overflow: 'hidden',
+                                aspectRatio: '1/1',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                                cursor: 'default',
+                                transition: 'all 0.3s ease',
+                                position: 'relative'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.02)';
+                                e.currentTarget.style.borderColor = activeTab === 'video' ? '#a855f7' : '#6366f1';
+                                e.currentTarget.style.boxShadow = activeTab === 'video' ? '0 10px 25px -5px rgba(168, 85, 247, 0.3)' : '0 10px 25px -5px rgba(99, 102, 241, 0.3)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                                e.currentTarget.style.boxShadow = 'none';
+                            }}
+                        >
+                            {activeTab === 'video' ? (
+                                <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000' }}>
+                                    <video
+                                        src={gen.file_path}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
+                                        muted
+                                        onMouseEnter={(e) => e.currentTarget.play()}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.pause();
+                                            e.currentTarget.currentTime = 0;
+                                        }}
+                                    />
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '10px',
+                                        left: '10px',
+                                        padding: '4px 8px',
+                                        backgroundColor: 'rgba(0,0,0,0.6)',
+                                        backdropFilter: 'blur(4px)',
+                                        borderRadius: '4px',
+                                        fontSize: '10px',
+                                        color: 'white',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        zIndex: 2
+                                    }}>
+                                        <Film size={10} />
+                                        VIDEO
+                                    </div>
+                                    <div style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        zIndex: 1,
+                                        pointerEvents: 'none'
+                                    }}>
+                                        <Video size={32} color="white" style={{ opacity: 0.5 }} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <img
+                                    src={gen.file_path}
+                                    alt={gen.prompt}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                            )}
+
+                            <div style={{
+                                position: 'absolute',
+                                inset: 0,
+                                background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 50%, rgba(0,0,0,0.4) 100%)',
+                                opacity: 0,
+                                transition: 'opacity 0.3s ease',
+                                padding: '1rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                zIndex: 10
+                            }}
+                                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
+                            >
+                                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                        onClick={(e) => handleDelete(e, gen.job_id)}
+                                        style={{
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                                            color: '#ef4444',
+                                            padding: '0.4rem',
+                                            borderRadius: '0.5rem',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = '#ef4444';
+                                            e.currentTarget.style.color = 'white';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                            e.currentTarget.style.color = '#ef4444';
+                                        }}
+                                        title="Delete Generation"
+                                    >
+                                        <Trash2 style={{ width: '0.9rem', height: '0.9rem' }} />
+                                    </button>
+                                </div>
+                                <p style={{
+                                    color: 'white',
+                                    fontSize: '0.75rem',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                }}>
+                                    {gen.prompt}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

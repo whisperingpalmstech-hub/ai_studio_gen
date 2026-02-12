@@ -6,6 +6,7 @@ import {
     Sparkles,
     LayoutDashboard,
     ImageIcon,
+    Video,
     Layers,
     FolderOpen,
     Settings,
@@ -16,10 +17,14 @@ import {
     Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { useCredits } from "@/lib/hooks/use-credits";
+import { UpgradeModal } from "@/components/UpgradeModal";
 
 const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Generate", href: "/dashboard/generate", icon: Sparkles },
+    { name: "Generate Video", href: "/dashboard/generate-video", icon: Video },
     { name: "Gallery", href: "/dashboard/gallery", icon: ImageIcon },
     { name: "Workflows", href: "/dashboard/workflows", icon: Layers },
     { name: "Models", href: "/dashboard/models", icon: FolderOpen },
@@ -29,12 +34,16 @@ const bottomNavigation = [
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
+
+
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
     const pathname = usePathname();
+    const { credits, tier, loading, refresh } = useCredits();
+    const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
 
     const sidebarStyle: React.CSSProperties = {
         position: 'fixed',
@@ -167,12 +176,15 @@ export default function DashboardLayout({
                             <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Credits</span>
                             <Zap style={{ width: '1rem', height: '1rem', color: '#6366f1' }} />
                         </div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.25rem', color: 'white' }}>100</div>
-                        <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.75rem' }}>
-                            Free tier • Resets monthly
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.25rem', color: 'white' }}>
+                            {loading ? '...' : credits}
                         </div>
-                        <Link href="/dashboard/billing" style={{ textDecoration: 'none' }}>
-                            <button style={{
+                        <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.75rem' }}>
+                            {tier === 'pro' ? 'Pro Plan • 1000/mo' : 'Free tier • Resets monthly'}
+                        </div>
+                        <button
+                            onClick={() => setIsUpgradeOpen(true)}
+                            style={{
                                 width: '100%',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -185,11 +197,11 @@ export default function DashboardLayout({
                                 border: '1px solid rgba(255, 255, 255, 0.2)',
                                 borderRadius: '0.375rem',
                                 cursor: 'pointer'
-                            }}>
-                                <CreditCard style={{ width: '0.75rem', height: '0.75rem' }} />
-                                Upgrade Plan
-                            </button>
-                        </Link>
+                            }}
+                        >
+                            <CreditCard style={{ width: '0.75rem', height: '0.75rem' }} />
+                            {tier === 'pro' ? 'Manage Plan' : 'Upgrade Plan'}
+                        </button>
                     </div>
                 </div>
 
@@ -220,7 +232,7 @@ export default function DashboardLayout({
                         </div>
                         <div style={{ flex: 1 }}>
                             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'white' }}>User</div>
-                            <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Free tier</div>
+                            <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{tier === 'pro' ? 'Pro' : 'Free'}</div>
                         </div>
                         <ChevronDown style={{ width: '1rem', height: '1rem', color: '#9ca3af' }} />
                     </button>
@@ -231,6 +243,13 @@ export default function DashboardLayout({
             <main style={{ flex: 1, marginLeft: '16rem', padding: '2rem' }}>
                 {children}
             </main>
+
+            <UpgradeModal
+                isOpen={isUpgradeOpen}
+                onClose={() => setIsUpgradeOpen(false)}
+                currentTier={tier}
+                onSuccess={refresh}
+            />
         </div>
     );
 }

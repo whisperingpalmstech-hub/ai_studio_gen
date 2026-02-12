@@ -5,6 +5,7 @@ import morgan from "morgan";
 import dotenv from "dotenv";
 import { jobsRouter } from "./routes/jobs.js";
 import { modelsRouter } from "./routes/models.js";
+import { usersRouter } from "./routes/users.js";
 import { healthRouter } from "./routes/health.js";
 import { errorHandler } from "./middleware/error.js";
 import { authMiddleware } from "./middleware/auth.js";
@@ -34,6 +35,7 @@ app.use("/health", healthRouter);
 // API routes (auth required)
 app.use("/api/v1/jobs", authMiddleware, jobsRouter);
 app.use("/api/v1/models", authMiddleware, modelsRouter);
+app.use("/api/v1/users", authMiddleware, usersRouter);
 
 // 404 handler
 app.use((req, res) => {
@@ -58,5 +60,9 @@ import { comfyUIWebSocketService } from "./services/comfyui-ws.js";
 
 webSocketService.initialize(server);
 comfyUIWebSocketService.initialize();
+
+// Seed models on startup
+import { seedModels } from "./seed-models.js";
+seedModels().catch(err => console.error("Failed to seed models:", err));
 
 export default app;

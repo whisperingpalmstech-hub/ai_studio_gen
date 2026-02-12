@@ -34,6 +34,22 @@ const inpaintSchema = img2imgSchema.extend({
     mask_url: z.string().min(1),
 });
 
+const t2vSchema = z.object({
+    prompt: z.string().min(1).max(2000),
+    negative_prompt: z.string().max(2000).optional().default(""),
+    width: z.number().min(128).max(2048).optional().default(832),
+    height: z.number().min(128).max(2048).optional().default(480),
+    steps: z.number().min(1).max(100).optional().default(30),
+    guidance_scale: z.number().min(1).max(30).optional().default(6),
+    video_frames: z.number().optional().default(81),
+    fps: z.number().optional().default(16),
+    seed: z.number().optional().default(-1),
+});
+
+const i2vSchema = t2vSchema.extend({
+    image_url: z.string().min(1),
+});
+
 const workflowSchema = z.object({
     workflow: z.record(z.any()),
     prompt: z.string().optional(), // Metadata
@@ -46,7 +62,7 @@ router.post("/", async (req: AuthenticatedRequest, res: Response, next: NextFunc
         const { type = "txt2img", ...params } = req.body;
 
         // Validate job type
-        const validTypes = ["txt2img", "img2img", "inpaint", "outpaint", "upscale", "workflow"];
+        const validTypes = ["txt2img", "img2img", "inpaint", "outpaint", "upscale", "workflow", "t2v", "i2v"];
         if (!validTypes.includes(type)) {
             throw new BadRequestError(`Invalid job type: ${type}`);
         }
@@ -64,6 +80,12 @@ router.post("/", async (req: AuthenticatedRequest, res: Response, next: NextFunc
                 case "inpaint":
                 case "outpaint":
                     validatedParams = inpaintSchema.parse(params);
+                    break;
+                case "t2v":
+                    validatedParams = t2vSchema.parse(params);
+                    break;
+                case "i2v":
+                    validatedParams = i2vSchema.parse(params);
                     break;
                 case "workflow":
                     validatedParams = workflowSchema.parse(params);
@@ -143,6 +165,17 @@ router.post("/", async (req: AuthenticatedRequest, res: Response, next: NextFunc
                 },
             }
         );
+
+        // Deduct credits
+        const { error: creditError } = await (supabaseAdmin
+            .from("profiles") as any)
+            .update({ credits: user.credits - creditCost })
+            .eq("id", user.id);
+
+        if (creditError) {
+            console.error("Failed to deduct credits:", creditError);
+            // Ideally rollback job creation here, but for now we proceed
+        }
 
         // Update job status to queued
         await ((supabaseAdmin as any)

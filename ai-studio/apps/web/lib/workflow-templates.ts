@@ -143,35 +143,71 @@ export const WORKFLOW_TEMPLATES = [
             { id: 'e8-9', source: '8', target: '9', sourceHandle: 'image', targetHandle: 'images' }
         ]
     },
+
     {
-        id: 'tpl-video',
-        name: 'Generative AI Video (SVD)',
-        description: 'Bring static images to life. Transform a single image into a cinematic high-fidelity video clip.',
-        category: 'Advanced',
+        id: 'tpl-wan-i2v',
+        name: 'Wan 2.1 Image-to-Video',
+        description: 'Transform a static image into a high-quality video using Wan 2.1.',
+        category: 'Wan 2.1',
         nodes: [
-            { id: '1', type: 'loadModel', position: { x: 50, y: 50 }, data: { label: 'SVD Checkpoint' } },
-            { id: '2', type: 'loadImage', position: { x: 50, y: 350 }, data: { label: 'Input Image' } },
-            { id: '3', type: 'svdLoader', position: { x: 400, y: 50 }, data: { label: 'SVD Conditioning', fps: 12, motion_bucket_id: 127, augmentation_level: 0.0 } },
-            { id: '4', type: 'videoLinearCFG', position: { x: 400, y: 350 }, data: { label: 'Video CFG', min_cfg: 1.0 } },
-            { id: '5', type: 'sampler', position: { x: 750, y: 50 }, data: { label: 'Video Sampler', steps: 20, cfg: 2.5 } },
-            { id: '6', type: 'vaeDecode', position: { x: 1050, y: 50 }, data: { label: 'Video Decode' } },
-            { id: '7', type: 'videoCombine', position: { x: 1350, y: 50 }, data: { label: 'Video Combine', format: 'video/h264-mp4', fps: 12 } },
-            { id: '8', type: 'clipVision', position: { x: 50, y: 200 }, data: { label: 'CLIP Vision Loader', model: 'clip_vision_vit_h.safetensors' } },
-            { id: '9', type: 'output', position: { x: 1350, y: 350 }, data: { label: 'Save Frames' } }
+            { id: '1', type: 'unetLoader', position: { x: 50, y: 50 }, data: { label: 'Wan 2.1 Model', model: 'wan2.1_i2v_720p_14B_bf16.safetensors' } },
+            { id: '2', type: 'vaeLoader', position: { x: 50, y: 200 }, data: { label: 'Wan VAE', model: 'wan_2.1_vae.safetensors' } },
+            { id: '3', type: 'clipLoader', position: { x: 50, y: 350 }, data: { label: 'T5 Encoder', model: 'umt5_xxl_fp8_e4m3fn_scaled.safetensors' } },
+            { id: '4', type: 'clipVision', position: { x: 50, y: 500 }, data: { label: 'CLIP Vision', model: 'clip_vision_h.safetensors' } },
+            { id: '5', type: 'loadImage', position: { x: 400, y: 50 }, data: { label: 'Input Image' } },
+            { id: '6', type: 'prompt', position: { x: 400, y: 250 }, data: { label: 'Positive Prompt', prompt: 'cinematic motion, slow camera pan' } },
+            { id: '7', type: 'prompt', position: { x: 400, y: 450 }, data: { label: 'Negative Prompt', prompt: 'distorted, low quality' } },
+            { id: '8', type: 'clipVisionEncode', position: { x: 400, y: 650 }, data: { label: 'CLIP Vision Encode' } },
+            { id: '9', type: 'wanI2V', position: { x: 750, y: 50 }, data: { label: 'Wan I2V', video_frames: 81, width: 832, height: 480 } },
+            { id: '10', type: 'sampler', position: { x: 1100, y: 50 }, data: { label: 'KSampler', steps: 30, cfg: 6.0, sampler: 'uni_pc_bh2', scheduler: 'simple' } },
+            { id: '11', type: 'vaeDecode', position: { x: 1450, y: 50 }, data: { label: 'VAE Decode' } },
+            { id: '12', type: 'videoCombine', position: { x: 1800, y: 50 }, data: { label: 'Save Video', fps: 16 } }
         ],
         edges: [
-            { id: 'e8-3', source: '8', target: '3', sourceHandle: 'clip_vision', targetHandle: 'clip_vision' },
-            { id: 'e1-3v', source: '1', target: '3', sourceHandle: 'vae', targetHandle: 'vae' },
-            { id: 'e2-3', source: '2', target: '3', sourceHandle: 'image', targetHandle: 'init_image' },
-            { id: 'e1-4', source: '1', target: '4', sourceHandle: 'model', targetHandle: 'model' },
-            { id: 'e4-5', source: '4', target: '5', sourceHandle: 'model_out', targetHandle: 'model' },
-            { id: 'e3-5p', source: '3', target: '5', sourceHandle: 'positive', targetHandle: 'positive' },
-            { id: 'e3-5n', source: '3', target: '5', sourceHandle: 'negative', targetHandle: 'negative' },
-            { id: 'e3-5l', source: '3', target: '5', sourceHandle: 'latent', targetHandle: 'latent_in' },
-            { id: 'e5-6', source: '5', target: '6', sourceHandle: 'latent_out', targetHandle: 'samples' },
-            { id: 'e1-6', source: '1', target: '6', sourceHandle: 'vae', targetHandle: 'vae' },
-            { id: 'e6-7', source: '6', target: '7', sourceHandle: 'image', targetHandle: 'images' },
-            { id: 'e6-9', source: '6', target: '9', sourceHandle: 'image', targetHandle: 'images' }
+            { id: 'e3-6', source: '3', target: '6', sourceHandle: 'clip', targetHandle: 'clip' },
+            { id: 'e3-7', source: '3', target: '7', sourceHandle: 'clip', targetHandle: 'clip' },
+            { id: 'e4-8', source: '4', target: '8', sourceHandle: 'clip_vision', targetHandle: 'clip_vision' },
+            { id: 'e5-8', source: '5', target: '8', sourceHandle: 'image', targetHandle: 'image' },
+            { id: 'e6-9', source: '6', target: '9', sourceHandle: 'conditioning', targetHandle: 'positive' },
+            { id: 'e7-9', source: '7', target: '9', sourceHandle: 'conditioning', targetHandle: 'negative' },
+            { id: 'e2-9', source: '2', target: '9', sourceHandle: 'vae', targetHandle: 'vae' },
+            { id: 'e5-9', source: '5', target: '9', sourceHandle: 'image', targetHandle: 'start_image' },
+            { id: 'e8-9', source: '8', target: '9', sourceHandle: 'clip_vision_output', targetHandle: 'clip_vision_output' },
+            { id: 'e1-10', source: '1', target: '10', sourceHandle: 'model', targetHandle: 'model' },
+            { id: 'e9-10p', source: '9', target: '10', sourceHandle: 'positive', targetHandle: 'positive' },
+            { id: 'e9-10n', source: '9', target: '10', sourceHandle: 'negative', targetHandle: 'negative' },
+            { id: 'e9-10l', source: '9', target: '10', sourceHandle: 'latent', targetHandle: 'latent_in' },
+            { id: 'e10-11', source: '10', target: '11', sourceHandle: 'latent_out', targetHandle: 'samples' },
+            { id: 'e2-11', source: '2', target: '11', sourceHandle: 'vae', targetHandle: 'vae' },
+            { id: 'e11-12', source: '11', target: '12', sourceHandle: 'image', targetHandle: 'images' }
+        ]
+    },
+    {
+        id: 'tpl-wan-t2v',
+        name: 'Wan 2.1 Text-to-Video',
+        description: 'Generate videos from text descriptions using Wan 2.1.',
+        category: 'Wan 2.1',
+        nodes: [
+            { id: '1', type: 'unetLoader', position: { x: 50, y: 50 }, data: { label: 'Wan 2.1 Model', model: 'wan2.1_t2v_1.3B_bf16.safetensors' } },
+            { id: '2', type: 'vaeLoader', position: { x: 50, y: 200 }, data: { label: 'Wan VAE', model: 'wan_2.1_vae.safetensors' } },
+            { id: '3', type: 'clipLoader', position: { x: 50, y: 350 }, data: { label: 'T5 Encoder', model: 'umt5_xxl_fp8_e4m3fn_scaled.safetensors' } },
+            { id: '4', type: 'prompt', position: { x: 400, y: 50 }, data: { label: 'Positive Prompt', prompt: 'a cat running in a field, cinematic' } },
+            { id: '5', type: 'prompt', position: { x: 400, y: 250 }, data: { label: 'Negative Prompt', prompt: 'distorted, low quality' } },
+            { id: '6', type: 'wanEmptyLatent', position: { x: 400, y: 450 }, data: { label: 'Wan Latent', width: 832, height: 480, video_frames: 81 } },
+            { id: '7', type: 'sampler', position: { x: 750, y: 50 }, data: { label: 'KSampler', steps: 30, cfg: 6.0, sampler: 'uni_pc_bh2', scheduler: 'simple' } },
+            { id: '8', type: 'vaeDecode', position: { x: 1050, y: 50 }, data: { label: 'VAE Decode' } },
+            { id: '9', type: 'videoCombine', position: { x: 1350, y: 50 }, data: { label: 'Save Video', fps: 16 } }
+        ],
+        edges: [
+            { id: 'e1-7', source: '1', target: '7', sourceHandle: 'model', targetHandle: 'model' },
+            { id: 'e3-4', source: '3', target: '4', sourceHandle: 'clip', targetHandle: 'clip' },
+            { id: 'e3-5', source: '3', target: '5', sourceHandle: 'clip', targetHandle: 'clip' },
+            { id: 'e4-7', source: '4', target: '7', sourceHandle: 'conditioning', targetHandle: 'positive' },
+            { id: 'e5-7', source: '5', target: '7', sourceHandle: 'conditioning', targetHandle: 'negative' },
+            { id: 'e6-7', source: '6', target: '7', sourceHandle: 'latent', targetHandle: 'latent_in' },
+            { id: 'e7-8', source: '7', target: '8', sourceHandle: 'latent_out', targetHandle: 'samples' },
+            { id: 'e2-8', source: '2', target: '8', sourceHandle: 'vae', targetHandle: 'vae' },
+            { id: 'e8-9', source: '8', target: '9', sourceHandle: 'image', targetHandle: 'images' }
         ]
     }
 ];

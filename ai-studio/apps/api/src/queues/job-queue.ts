@@ -123,7 +123,7 @@ async function processJob(job: Job<GenerationJobData>) {
                 }
             }
 
-            comfyPrompt = generateSimpleWorkflow(params);
+            comfyPrompt = generateSimpleWorkflow({ ...params, type });
             console.log(`Generated standard workflow for ${type}`);
         }
 
@@ -138,7 +138,7 @@ async function processJob(job: Job<GenerationJobData>) {
         let finalStatus = "processing";
 
         const startTime = Date.now();
-        const timeout = 600000; // 10 minutes timeout
+        const timeout = 3600000; // 1 hour timeout (increased for video/slow GPUs)
 
         while (!isComplete) {
             if (Date.now() - startTime > timeout) {
@@ -175,14 +175,83 @@ async function processJob(job: Job<GenerationJobData>) {
         // 4. Process Outputs
         const nodeResults: Record<string, any[]> = {};
         const allProcessedImages: any[] = [];
+        let hasFoundVideo = false;
 
         for (const nodeId of Object.keys(outputs)) {
             const nodeOutput = outputs[nodeId];
+            const nodeInfo = (comfyPrompt as any)?.[nodeId];
+            const nodeName = nodeInfo ? `${nodeInfo.class_type} (${nodeId})` : `Node ${nodeId}`;
+
+            console.log(`Processing ${nodeName} output:`, JSON.stringify(nodeOutput));
+
+            // Handle Videos/GIFs first
+            const videoData = nodeOutput.gifs || nodeOutput.videos || nodeOutput.filenames || nodeOutput.video || nodeOutput.files;
+            if (videoData) {
+                console.log(`Found explicit video data in ${nodeName}`);
+                if (!nodeResults[nodeId]) nodeResults[nodeId] = [];
+                for (let vid of videoData) {
+                    if (typeof vid === 'string') {
+                        vid = { filename: vid, subfolder: '', type: 'output' };
+                    }
+
+                    if (vid.filename && (vid.filename.endsWith('.mp4') || vid.filename.endsWith('.webm') || vid.filename.endsWith('.gif') || vid.type === 'output')) {
+                        try {
+                            const buffer = await comfyUIService.getImage(vid.filename, vid.subfolder || '', vid.type || 'output');
+                            const storagePath = `generations/${userId}/${jobId}/${vid.filename}`;
+                            const contentType = vid.format || (vid.filename.endsWith('.gif') ? 'image/gif' : 'video/mp4');
+
+                            await supabaseAdmin.storage.from('assets').upload(storagePath, buffer, { contentType, upsert: true });
+                            const { data: { publicUrl } } = supabaseAdmin.storage.from('assets').getPublicUrl(storagePath);
+
+                            const videoResult = {
+                                filename: vid.filename,
+                                url: publicUrl,
+                                width: params.width || 832,
+                                height: params.height || 480,
+                                type: 'video'
+                            };
+                            nodeResults[nodeId].push(videoResult);
+                            allProcessedImages.push(videoResult);
+                            hasFoundVideo = true;
+                        } catch (e) {
+                            console.error(`Failed to process video output from ${nodeName}:`, e);
+                        }
+                    }
+                }
+            }
 
             // Handle Images
+            const isVideoJob = (type === 't2v' || type === 'i2v');
             if (nodeOutput.images) {
-                if (!nodeResults[nodeId]) nodeResults[nodeId] = [];
+                console.log(`Found ${nodeOutput.images.length} images in ${nodeName}`);
+
+                // If we have a massive batch of images in a video job, it's likely frames
+                if (isVideoJob && nodeOutput.images.length > 5 && !hasFoundVideo) {
+                    console.warn(`Warning: ${nodeName} produced ${nodeOutput.images.length} frames but no final video was found. This might indicate a missing VideoHelperSuite node or an issue with video encoding.`);
+                }
+
                 for (const img of nodeOutput.images) {
+                    // Check if extension is actually a video
+                    if (img.filename && (img.filename.endsWith('.mp4') || img.filename.endsWith('.webm'))) {
+                        try {
+                            const buffer = await comfyUIService.getImage(img.filename, img.subfolder, img.type || 'output');
+                            const storagePath = `generations/${userId}/${jobId}/${img.filename}`;
+                            await supabaseAdmin.storage.from('assets').upload(storagePath, buffer, { contentType: 'video/mp4', upsert: true });
+                            const { data: { publicUrl } } = supabaseAdmin.storage.from('assets').getPublicUrl(storagePath);
+
+                            const videoResult = { filename: img.filename, url: publicUrl, width: params.width || 832, height: params.height || 480, type: 'video' };
+                            if (!nodeResults[nodeId]) nodeResults[nodeId] = [];
+                            nodeResults[nodeId].push(videoResult);
+                            allProcessedImages.push(videoResult);
+                            hasFoundVideo = true;
+                        } catch (e) {
+                            console.error(`Failed to process hidden video in ${nodeName}:`, e);
+                        }
+                        continue;
+                    }
+
+                    // Standard image handling
+                    // Prioritize 'output' type.
                     if (img.type === 'output') {
                         try {
                             const buffer = await comfyUIService.getImage(img.filename, img.subfolder, img.type);
@@ -190,79 +259,64 @@ async function processJob(job: Job<GenerationJobData>) {
                             await supabaseAdmin.storage.from('assets').upload(storagePath, buffer, { contentType: 'image/png', upsert: true });
                             const { data: { publicUrl } } = supabaseAdmin.storage.from('assets').getPublicUrl(storagePath);
 
-                            const imageData = { filename: img.filename, url: publicUrl, width: Number(img.width) || 512, height: Number(img.height) || 512, type: 'image' };
-                            nodeResults[nodeId].push(imageData);
-                            allProcessedImages.push(imageData);
+                            const imageResult = { filename: img.filename, url: publicUrl, width: params.width || 512, height: params.height || 512, type: 'image' };
+                            if (!nodeResults[nodeId]) nodeResults[nodeId] = [];
+                            nodeResults[nodeId].push(imageResult);
+                            allProcessedImages.push(imageResult);
                         } catch (e) {
-                            console.error(`Failed to process output image for node ${nodeId}:`, e);
-                        }
-                    }
-                }
-            }
-
-            // Handle Videos/GIFs (VideoHelperSuite returns videos under "gifs" key mostly)
-            const videoData = nodeOutput.gifs || nodeOutput.videos;
-            if (videoData) {
-                if (!nodeResults[nodeId]) nodeResults[nodeId] = [];
-                for (const vid of videoData) {
-                    if (vid.type === 'output') {
-                        try {
-                            const buffer = await comfyUIService.getImage(vid.filename, vid.subfolder, vid.type);
-                            const storagePath = `generations/${userId}/${jobId}/${vid.filename}`;
-                            const contentType = vid.format || (vid.filename.endsWith('.gif') ? 'image/gif' : 'video/mp4');
-                            await supabaseAdmin.storage.from('assets').upload(storagePath, buffer, { contentType, upsert: true });
-                            const { data: { publicUrl } } = supabaseAdmin.storage.from('assets').getPublicUrl(storagePath);
-
-                            const videoResult = {
-                                filename: vid.filename,
-                                url: publicUrl,
-                                width: 1024, // SVD default
-                                height: 576,
-                                type: 'video'
-                            };
-                            nodeResults[nodeId].push(videoResult);
-                            allProcessedImages.push(videoResult);
-                        } catch (e) {
-                            console.error(`Failed to process output video for node ${nodeId}:`, e);
+                            console.error(`Failed to process output image for ${nodeName}:`, e);
                         }
                     }
                 }
             }
         }
 
-        if (allProcessedImages.length === 0) throw new Error("No output generated from ComfyUI execution");
+        if (allProcessedImages.length === 0) {
+            console.error(`Job Failed. Remaining History:`, JSON.stringify(outputs));
+            throw new Error("No output generated from ComfyUI execution. Check if your video nodes are correctly installed.");
+        }
 
         // 5. Save Assets to DB
-        const primaryImage = allProcessedImages[0];
-        const { data: asset, error: assetError } = await (supabaseAdmin
-            .from("assets")
-            .insert({
-                user_id: userId,
-                job_id: jobId,
-                type: primaryImage.type || "image",
-                file_path: primaryImage.url,
-                width: primaryImage.width,
-                height: primaryImage.height,
-                params: params as any,
-                model_name: "stable-diffusion-v1-5",
-                prompt: params.prompt as string || "Workflow Results",
-                created_at: new Date().toISOString()
-            } as any)
-            .select()
-            .single() as any);
-
-        if (assetError) throw new Error("Asset creation failed: " + assetError.message);
-
-        // Notify User with node-specific results
-        webSocketService.sendToUser(userId, {
-            type: "job_complete",
-            jobId,
-            status: "completed",
-            result: asset,
-            results: nodeResults
+        // Prioritize video for the main asset and for the first item in the images array
+        const sortedImages = [...allProcessedImages].sort((a, b) => {
+            if (a.type === 'video' && b.type !== 'video') return -1;
+            if (a.type !== 'video' && b.type === 'video') return 1;
+            return 0;
         });
 
-        // Update Job
+        let asset: any = null;
+        if (sortedImages.length > 0) {
+            const primaryImage = sortedImages[0];
+            const { data, error: assetError } = await (supabaseAdmin
+                .from("assets")
+                .insert({
+                    user_id: userId,
+                    job_id: jobId,
+                    type: primaryImage.type || "image",
+                    file_path: primaryImage.url,
+                    width: primaryImage.width,
+                    height: primaryImage.height,
+                    params: params as any,
+                    model_name: "wan-2-1",
+                    prompt: params.prompt as string || "Workflow Results",
+                    created_at: new Date().toISOString()
+                } as any)
+                .select()
+                .single() as any);
+
+            if (assetError) throw new Error("Asset creation failed: " + assetError.message);
+            asset = data;
+
+            // 6. Notify User
+            webSocketService.sendToUser(userId, {
+                type: "job_completed",
+                jobId,
+                images: sortedImages.map(img => img.url),
+                asset: asset
+            });
+        }
+
+        // 7. Update Job Status
         await ((supabaseAdmin as any)
             .from("jobs")
             .update({
@@ -297,10 +351,6 @@ async function processJob(job: Job<GenerationJobData>) {
             })
             .eq("id", jobId));
 
-        // Don't rethrow to BullMQ to avoid infinite retries if logic failed? 
-        // BullMQ will treat throw as fail and obey 'removeOnFail' and retry attempts.
-        // We probably want to stop retrying if it's a logic/workflow error.
-        // For now, let it fail.
         if (promptId) {
             const { comfyUIWebSocketService } = await import("../services/comfyui-ws.js");
             comfyUIWebSocketService.unregisterPrompt(promptId);

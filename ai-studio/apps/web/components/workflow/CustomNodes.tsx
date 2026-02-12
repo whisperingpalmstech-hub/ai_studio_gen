@@ -824,13 +824,19 @@ export const SVDLoaderNode = memo(({ id, data }: any) => {
                         <input type="number" defaultValue={data.fps || 12} onChange={(e) => updateData('fps', parseInt(e.target.value))} style={styles.input} />
                     </div>
                     <div style={styles.inputGroup}>
+                        <label style={styles.label}>Frames</label>
+                        <input type="number" defaultValue={data.video_frames || 25} onChange={(e) => updateData('video_frames', parseInt(e.target.value))} style={styles.input} />
+                    </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div style={styles.inputGroup}>
+                        <label style={styles.label}>Motion Bucket ID</label>
+                        <input type="number" defaultValue={data.motion_bucket_id || 127} onChange={(e) => updateData('motion_bucket_id', parseInt(e.target.value))} style={styles.input} />
+                    </div>
+                    <div style={styles.inputGroup}>
                         <label style={styles.label}>Augmentation</label>
                         <input type="number" defaultValue={data.augmentation_level || 0.0} step={0.01} onChange={(e) => updateData('augmentation_level', parseFloat(e.target.value))} style={styles.input} />
                     </div>
-                </div>
-                <div style={styles.inputGroup}>
-                    <label style={styles.label}>Motion Bucket ID</label>
-                    <input type="number" defaultValue={data.motion_bucket_id || 127} onChange={(e) => updateData('motion_bucket_id', parseInt(e.target.value))} style={styles.input} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -952,3 +958,185 @@ export const VideoCombineNode = memo(({ id, data }: any) => {
     );
 });
 VideoCombineNode.displayName = 'VideoCombineNode';
+
+export const WanLoaderNode = memo(({ id, data }: any) => {
+    const updateData = useUpdateNodeData(id);
+    return (
+        <div style={getNodeStyle(data)}>
+            <NodeHeader label={data.label || "Wan 2.1 I2V"} color="#ec4899" icon={Box} />
+            <div style={styles.body}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div style={styles.inputGroup}>
+                        <label style={styles.label}>Width</label>
+                        <input type="number" defaultValue={data.width || 832} onChange={(e) => updateData('width', parseInt(e.target.value))} style={styles.input} />
+                    </div>
+                    <div style={styles.inputGroup}>
+                        <label style={styles.label}>Height</label>
+                        <input type="number" defaultValue={data.height || 480} onChange={(e) => updateData('height', parseInt(e.target.value))} style={styles.input} />
+                    </div>
+                </div>
+                <div style={styles.inputGroup}>
+                    <label style={styles.label}>Frames</label>
+                    <input type="number" defaultValue={data.video_frames || 81} onChange={(e) => updateData('video_frames', parseInt(e.target.value))} style={styles.input} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <IOHandle type="target" position={Position.Left} label="POS" color="#a855f7" id="positive" />
+                        <IOHandle type="target" position={Position.Left} label="NEG" color="#a855f7" id="negative" />
+                        <IOHandle type="target" position={Position.Left} label="VAE" color="#ef4444" id="vae" />
+                        <IOHandle type="target" position={Position.Left} label="IMAGE" color="#fbbf24" id="start_image" />
+                        <IOHandle type="target" position={Position.Left} label="CLIP_VIS" color="#fbbf24" id="clip_vision_output" />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end' }}>
+                        <IOHandle type="source" position={Position.Right} label="POS" color="#a855f7" id="positive" />
+                        <IOHandle type="source" position={Position.Right} label="NEG" color="#a855f7" id="negative" />
+                        <IOHandle type="source" position={Position.Right} label="LATENT" color="#ec4899" id="latent" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+});
+WanLoaderNode.displayName = 'WanLoaderNode';
+
+export const UNETLoaderNode = memo(({ id, data }: any) => {
+    const updateData = useUpdateNodeData(id);
+    return (
+        <div style={getNodeStyle(data)}>
+            <NodeHeader label={data.label || "UNET Loader"} color="#6366f1" icon={Box} />
+            <div style={styles.body}>
+                <div style={styles.inputGroup}>
+                    <label style={styles.label}>Model</label>
+                    <input type="text" value={data.model || ''} onChange={(e) => updateData('model', e.target.value)} style={styles.input} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                    <IOHandle type="source" position={Position.Right} label="MODEL" color="#6366f1" id="model" />
+                </div>
+            </div>
+        </div>
+    );
+});
+UNETLoaderNode.displayName = 'UNETLoaderNode';
+
+export const CLIPLoaderNode = memo(({ id, data }: any) => {
+    const updateData = useUpdateNodeData(id);
+    return (
+        <div style={getNodeStyle(data)}>
+            <NodeHeader label={data.label || "CLIP Loader"} color="#fbbf24" icon={Type} />
+            <div style={styles.body}>
+                <div style={styles.inputGroup}>
+                    <label style={styles.label}>Model</label>
+                    <input type="text" value={data.model || ''} onChange={(e) => updateData('model', e.target.value)} style={styles.input} />
+                </div>
+                <div style={styles.inputGroup}>
+                    <label style={styles.label}>Type</label>
+                    <select value={data.clip_type || 'wan'} onChange={(e) => updateData('clip_type', e.target.value)} style={styles.input}>
+                        <option value="wan">wan</option>
+                        <option value="sd1">sd1</option>
+                        <option value="sdxl">sdxl</option>
+                    </select>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                    <IOHandle type="source" position={Position.Right} label="CLIP" color="#fbbf24" id="clip" />
+                </div>
+            </div>
+        </div>
+    );
+});
+CLIPLoaderNode.displayName = 'CLIPLoaderNode';
+
+export const VAELoaderNode = memo(({ id, data }: any) => {
+    const updateData = useUpdateNodeData(id);
+    return (
+        <div style={getNodeStyle(data)}>
+            <NodeHeader label={data.label || "VAE Loader"} color="#ef4444" icon={Box} />
+            <div style={styles.body}>
+                <div style={styles.inputGroup}>
+                    <label style={styles.label}>VAE Model</label>
+                    <input type="text" value={data.model || ''} onChange={(e) => updateData('model', e.target.value)} style={styles.input} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                    <IOHandle type="source" position={Position.Right} label="VAE" color="#ef4444" id="vae" />
+                </div>
+            </div>
+        </div>
+    );
+});
+VAELoaderNode.displayName = 'VAELoaderNode';
+
+export const CLIPVisionEncodeNode = memo(({ id, data }: any) => {
+    return (
+        <div style={getNodeStyle(data)}>
+            <NodeHeader label={data.label || "CLIP Vision Encode"} color="#fbbf24" icon={Eye} />
+            <div style={styles.body}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <IOHandle type="target" position={Position.Left} label="CLIP_VISION" color="#fbbf24" id="clip_vision" />
+                        <IOHandle type="target" position={Position.Left} label="IMAGE" color="#fbbf24" id="image" />
+                    </div>
+                    <IOHandle type="source" position={Position.Right} label="CLIP_VIS_OUT" color="#fbbf24" id="clip_vision_output" />
+                </div>
+            </div>
+        </div>
+    );
+});
+CLIPVisionEncodeNode.displayName = 'CLIPVisionEncodeNode';
+
+export const WanVideoSamplerNode = memo(({ id, data }: any) => {
+    const updateData = useUpdateNodeData(id);
+    return (
+        <div style={getNodeStyle(data)}>
+            <NodeHeader label={data.label || "Wan Video Sampler"} color="#ec4899" icon={Box} />
+            <div style={styles.body}>
+                <div style={styles.inputGroup}>
+                    <label style={styles.label}>Steps</label>
+                    <input type="number" defaultValue={data.steps || 30} onChange={(e) => updateData('steps', parseInt(e.target.value))} style={styles.input} />
+                </div>
+                <div style={styles.inputGroup}>
+                    <label style={styles.label}>CFG</label>
+                    <input type="number" step="0.1" defaultValue={data.cfg || 6.0} onChange={(e) => updateData('cfg', parseFloat(e.target.value))} style={styles.input} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <IOHandle type="target" position={Position.Left} label="MODEL" color="#6366f1" id="model" />
+                        <IOHandle type="target" position={Position.Left} label="POS" color="#a855f7" id="positive" />
+                        <IOHandle type="target" position={Position.Left} label="NEG" color="#a855f7" id="negative" />
+                        <IOHandle type="target" position={Position.Left} label="LATENT" color="#ec4899" id="latent" />
+                    </div>
+                    <IOHandle type="source" position={Position.Right} label="LATENT" color="#ec4899" id="latent" />
+                </div>
+            </div>
+        </div>
+    );
+});
+WanVideoSamplerNode.displayName = 'WanVideoSamplerNode';
+
+export const WanEmptyLatentNode = memo(({ id, data }: any) => {
+    const updateData = useUpdateNodeData(id);
+    return (
+        <div style={getNodeStyle(data)}>
+            <NodeHeader label={data.label || "Wan Empty Latent"} color="#ec4899" icon={Box} />
+            <div style={styles.body}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div style={styles.inputGroup}>
+                        <label style={styles.label}>Width</label>
+                        <input type="number" defaultValue={data.width || 832} onChange={(e) => updateData('width', parseInt(e.target.value))} style={styles.input} />
+                    </div>
+                    <div style={styles.inputGroup}>
+                        <label style={styles.label}>Height</label>
+                        <input type="number" defaultValue={data.height || 480} onChange={(e) => updateData('height', parseInt(e.target.value))} style={styles.input} />
+                    </div>
+                </div>
+                <div style={styles.inputGroup}>
+                    <label style={styles.label}>Frames</label>
+                    <input type="number" defaultValue={data.video_frames || 81} onChange={(e) => updateData('video_frames', parseInt(e.target.value))} style={styles.input} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                    <IOHandle type="source" position={Position.Right} label="LATENT" color="#ec4899" id="latent" />
+                </div>
+            </div>
+        </div>
+    );
+});
+WanEmptyLatentNode.displayName = 'WanEmptyLatentNode';
+

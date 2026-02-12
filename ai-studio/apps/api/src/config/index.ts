@@ -69,6 +69,8 @@ export const config = {
         inpaint: 2,
         outpaint: 2,
         upscale: 1,
+        t2v: 5,
+        i2v: 5,
         video: 10,
     },
 

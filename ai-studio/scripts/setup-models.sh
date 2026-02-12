@@ -45,6 +45,13 @@ if [ ! -f "$COMFY_DIR/models/checkpoints/v1-5-pruned-emaonly.safetensors" ]; the
 fi
 register_model "Stable Diffusion v1.5" "checkpoint" "v1-5-pruned-emaonly.safetensors" "sd15"
 
+# 1.1. Download SDXL Base
+if [ ! -f "$COMFY_DIR/models/checkpoints/sd_xl_base_1.0.safetensors" ]; then
+    echo "📥 Downloading SDXL Base..."
+    wget -O "$COMFY_DIR/models/checkpoints/sd_xl_base_1.0.safetensors" "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
+fi
+register_model "Stable Diffusion XL" "checkpoint" "sd_xl_base_1.0.safetensors" "sdxl"
+
 # 2. Download SVD (Video)
 if [ ! -f "$COMFY_DIR/models/checkpoints/svd.safetensors" ]; then
     echo "📥 Downloading SVD (Video)..."
@@ -66,14 +73,38 @@ if [ ! -f "$COMFY_DIR/models/loras/lcm-lora-sdv1-5.safetensors" ]; then
 fi
 register_model "LCM Fast Generation" "lora" "lcm-lora-sdv1-5.safetensors" "sd15"
 
-# 5. Download CLIP Vision Model (Required for SVD)
-if [ ! -f "$COMFY_DIR/models/clip_vision/clip_vision_g.safetensors" ]; then
-    echo "📥 Downloading CLIP Vision model..."
-    wget -O "$COMFY_DIR/models/clip_vision/clip_vision_g.safetensors" "https://huggingface.co/comfyanonymous/clip_vision_g/resolve/main/clip_vision_g.safetensors"
+# 5. Download CLIP Vision Model (Required for SVD/Wan)
+if [ ! -f "$COMFY_DIR/models/clip_vision/clip_vision_h.safetensors" ]; then
+    echo "📥 Downloading CLIP Vision H model..."
+    wget -O "$COMFY_DIR/models/clip_vision/clip_vision_h.safetensors" "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision_h.safetensors"
 fi
-# Register as type 'other' for now if we don't have a specific CLIP_VISION type in UI list, 
-# or just assume it's for the clipVision node which doesn't fetch from DB yet.
-# Actually, let's keep it simple for now as the node currently uses a hardcoded list.
+
+# 6. Wan 2.1 Dependencies
+if [ ! -f "$COMFY_DIR/models/vae/wan_2.1_vae.safetensors" ]; then
+    echo "📥 Downloading Wan 2.1 VAE..."
+    wget -O "$COMFY_DIR/models/vae/wan_2.1_vae.safetensors" "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/wan_2.1_vae.safetensors"
+fi
+
+if [ ! -f "$COMFY_DIR/models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors" ]; then
+    echo "📥 Downloading Wan 2.1 Text Encoder..."
+    mkdir -p "$COMFY_DIR/models/text_encoders"
+    wget -O "$COMFY_DIR/models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors" "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+fi
+
+mkdir -p "$COMFY_DIR/models/diffusion_models"
+
+if [ ! -f "$COMFY_DIR/models/diffusion_models/wan2.1_i2v_720p_14B_bf16.safetensors" ]; then
+    echo "📥 Downloading Wan 2.1 I2V 720p 14B bf16 Model..."
+    wget -O "$COMFY_DIR/models/diffusion_models/wan2.1_i2v_720p_14B_bf16.safetensors" "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_i2v_720p_14B_bf16.safetensors"
+fi
+
+if [ ! -f "$COMFY_DIR/models/diffusion_models/wan2.1_t2v_1.3B_bf16.safetensors" ]; then
+    echo "📥 Downloading Wan 2.1 T2V 1.3B bf16 Model..."
+    wget -O "$COMFY_DIR/models/diffusion_models/wan2.1_t2v_1.3B_bf16.safetensors" "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_1.3B_bf16.safetensors"
+fi
+
+register_model "Wan 2.1 I2V 720p 14B bf16" "checkpoint" "wan2.1_i2v_720p_14B_bf16.safetensors" "other"
+register_model "Wan 2.1 T2V 1.3B bf16" "checkpoint" "wan2.1_t2v_1.3B_bf16.safetensors" "other"
 
 echo "✅ Model setup complete!"
-echo "Note: SVD is now available for your video workflows."
+echo "Note: SVD and Wan 2.1 are now available for your video workflows."

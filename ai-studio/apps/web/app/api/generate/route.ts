@@ -24,8 +24,10 @@ export async function POST(request: Request) {
             height = 512,
             seed = -1,
             sampler = "euler_a",
-            model,
-            image, // TODO: Handle image upload for img2img
+            model_id,
+            image,
+            video_frames,
+            fps
         } = body;
 
         // 3. Construct Payload for Local API
@@ -40,7 +42,9 @@ export async function POST(request: Request) {
             cfg_scale: guidance_scale,
             seed,
             sampler,
-            model_id: model,
+            model_id,
+            video_frames,
+            fps,
             // Add other potential params
             image_url: body.image, // For img2img/inpaint
             mask_url: body.mask,   // For inpaint

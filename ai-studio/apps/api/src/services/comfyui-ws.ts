@@ -95,11 +95,12 @@ class ComfyUIWebSocketService {
                 if (node === null) {
                     // Execution finished for this prompt
                 } else {
+                    // Reset progress for new node
                     webSocketService.sendToUser(promptInfo.userId, {
                         type: "job_progress",
                         jobId: promptInfo.jobId,
-                        message: `Executing Node: ${node}`,
-                        nodeId: node // Add explicit nodeId for frontend tracking
+                        progress: 0,
+                        message: `Starting Node: ${node}`
                     });
                 }
             }

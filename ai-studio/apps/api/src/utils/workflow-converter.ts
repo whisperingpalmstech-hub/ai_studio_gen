@@ -29,7 +29,9 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
         switch (node.type) {
             case "loadModel":
                 class_type = "CheckpointLoaderSimple";
-                inputs["ckpt_name"] = node.data.model || "v1-5-pruned-emaonly.ckpt";
+                let ckptName = node.data.model || "v1-5-pruned-emaonly.ckpt";
+                if (ckptName === "wan2.1_i2v_14B_720P.safetensors") ckptName = "wan2.1_i2v_720p_14B_bf16.safetensors";
+                inputs["ckpt_name"] = ckptName;
                 break;
             case "prompt":
                 class_type = "CLIPTextEncode";
@@ -41,8 +43,8 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
                 inputs["steps"] = node.data.steps || 20;
                 inputs["cfg"] = node.data.cfg || 8.0;
                 inputs["sampler_name"] = node.data.sampler || "euler";
-                inputs["scheduler"] = "normal";
-                inputs["denoise"] = 1.0;
+                inputs["scheduler"] = node.data.scheduler || "normal";
+                inputs["denoise"] = node.data.denoise ?? 1.0;
                 break;
             case "emptyLatent":
                 class_type = "EmptyLatentImage";
@@ -88,7 +90,6 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
             }
             case "upscale":
                 class_type = "ImageUpscaleWithModel";
-                // upscale_model, image from edges
                 break;
             case "faceSwap":
                 class_type = "ReActorFaceSwap";
@@ -144,8 +145,101 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
                 inputs["save_output"] = true;
                 inputs["pingpong"] = false;
                 inputs["save_metadata"] = true;
-                inputs["trim_last_frame"] = 0;
+                inputs["trim_to_audio"] = false;
                 break;
+            case "clipVisionEncode":
+                class_type = "CLIPVisionEncode";
+                inputs["crop"] = "center"; // Native ComfyUI requires this in many versions
+                break;
+
+            // === Native ComfyUI Wan 2.1 Nodes ===
+            case "unetLoader":
+                class_type = "UNETLoader";
+                let unetModel = node.data.model || "wan2.1_i2v_720p_14B_bf16.safetensors";
+                // Redirect stale model name if it appears
+                if (unetModel === "wan2.1_i2v_14B_720P.safetensors") {
+                    unetModel = "wan2.1_i2v_720p_14B_bf16.safetensors";
+                }
+                inputs["unet_name"] = unetModel;
+                inputs["weight_dtype"] = node.data.weight_dtype || "default";
+                break;
+            case "clipLoader":
+                class_type = "CLIPLoader";
+                inputs["clip_name"] = node.data.model || "umt5_xxl_fp8_e4m3fn_scaled.safetensors";
+                inputs["type"] = node.data.clip_type || "wan";
+                break;
+            case "vaeLoader":
+                class_type = "VAELoader";
+                inputs["vae_name"] = node.data.model || "wan_2.1_vae.safetensors";
+                break;
+            case "wanI2V":
+                // Native ComfyUI WanImageToVideo node
+                class_type = "WanImageToVideo";
+                inputs["width"] = node.data.width || 832;
+                inputs["height"] = node.data.height || 480;
+                inputs["length"] = node.data.video_frames || 81;
+                inputs["batch_size"] = node.data.batch_size || 1;
+                break;
+            case "wanT2V":
+                // Native Wan doesn't have a specific sampler, use standard KSampler
+                class_type = "KSampler";
+                inputs["seed"] = Math.floor(Math.random() * 1000000000);
+                inputs["steps"] = node.data.steps || 30;
+                inputs["cfg"] = node.data.cfg || 6.0;
+                inputs["sampler_name"] = node.data.sampler || "uni_pc_bh2";
+                inputs["scheduler"] = node.data.scheduler || "simple";
+                inputs["denoise"] = 1.0;
+                break;
+            case "wanEmptyLatent":
+                // Use the 16-channel video latent node from Hunyuan (identical to Wan's)
+                class_type = "EmptyHunyuanLatentVideo";
+                inputs["width"] = node.data.width || 832;
+                inputs["height"] = node.data.height || 480;
+                inputs["length"] = node.data.video_frames || 81;
+                inputs["batch_size"] = node.data.batch_size || 1;
+                break;
+
+            // === Legacy WanVideoWrapper nodes (kept for backward compat) ===
+            case "wanModelLoader":
+                class_type = "UNETLoader";
+                let legacyModel = node.data.model || "wan2.1_i2v_720p_14B_bf16.safetensors";
+                if (legacyModel === "wan2.1_i2v_14B_720P.safetensors") legacyModel = "wan2.1_i2v_720p_14B_bf16.safetensors";
+                inputs["unet_name"] = legacyModel;
+                inputs["weight_dtype"] = "default";
+                break;
+            case "wanVAELoader":
+                class_type = "VAELoader";
+                inputs["vae_name"] = node.data.model || "wan_2.1_vae.safetensors";
+                break;
+            case "wanT5Loader":
+                class_type = "CLIPLoader";
+                inputs["clip_name"] = node.data.model || "umt5_xxl_fp8_e4m3fn_scaled.safetensors";
+                inputs["type"] = "wan";
+                break;
+            case "wanTextEncode":
+                class_type = "CLIPTextEncode";
+                inputs["text"] = node.data.positive_prompt || node.data.prompt || "high quality video";
+                break;
+            case "wanLoader":
+                class_type = "WanImageToVideo";
+                inputs["width"] = node.data.width || 832;
+                inputs["height"] = node.data.height || 480;
+                inputs["length"] = node.data.video_frames || 81;
+                inputs["batch_size"] = 1;
+                break;
+            case "wanSampler":
+                class_type = "KSampler";
+                inputs["seed"] = node.data.seed || Math.floor(Math.random() * 10000000);
+                inputs["steps"] = node.data.steps || 30;
+                inputs["cfg"] = node.data.cfg || 6.0;
+                inputs["sampler_name"] = node.data.sampler || "uni_pc_bh2";
+                inputs["scheduler"] = node.data.scheduler || "simple";
+                inputs["denoise"] = 1.0;
+                break;
+            case "wanDecode":
+                class_type = "VAEDecode";
+                break;
+
             default:
                 console.warn(`Unknown node type: ${node.type}`);
                 class_type = node.type;
@@ -177,7 +271,17 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
             "face": "face_image",
             "clip_vision": "clip_vision",
             "init_image": "init_image",
-            "images": "images"
+            "images": "images",
+            "start_image": "start_image",
+            "t5": "clip",
+            "image_embeds": "clip_vision_output",
+            "text_embeds": "conditioning",
+            "model": "model",
+            "positive": "positive",
+            "negative": "negative",
+            "latent": "latent_image",
+            "clip": "clip",
+            "clip_vision_output": "clip_vision_output",
         };
 
         if (handleMap[inputName]) {
@@ -185,7 +289,7 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
         }
 
         // Specific override for VAE Decode which might use 'latents' or 'samples'
-        if (comfyWorkflow[edge.target].class_type === "VAEDecode" && inputName === "latent") {
+        if (targetNode.class_type === "VAEDecode" && inputName === "latent") {
             inputName = "samples";
         }
 
@@ -209,23 +313,44 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
                 if (sourceHandle === "image") outputIndex = 0;
                 else if (sourceHandle === "mask") outputIndex = 1;
             } else if (sourceNodeType === "latentUpscale" || sourceNodeType === "emptyLatent" || sourceNodeType === "vaeEncode" || sourceNodeType === "inpaint") {
-                outputIndex = 0; // SAMPLES / LATENT
+                outputIndex = 0;
             } else if (sourceNodeType === "vaeDecode" || sourceNodeType === "upscale" || sourceNodeType === "faceSwap") {
-                outputIndex = 0; // IMAGE
+                outputIndex = 0;
             } else if (sourceNodeType === "conditioningAverage" || sourceNodeType === "prompt") {
-                outputIndex = 0; // CONDITIONING
+                outputIndex = 0;
             } else if (sourceNodeType === "svdLoader") {
                 if (sourceHandle === "positive") outputIndex = 0;
                 else if (sourceHandle === "negative") outputIndex = 1;
                 else if (sourceHandle === "latent") outputIndex = 2;
             } else if (sourceNodeType === "videoLinearCFG") {
-                outputIndex = 0; // MODEL
+                outputIndex = 0;
             } else if (sourceNodeType === "clipVision") {
-                outputIndex = 0; // CLIP_VISION
+                outputIndex = 0;
+            } else if (sourceNodeType === "clipVisionEncode") {
+                outputIndex = 0; // CLIP_VISION_OUTPUT
+                // === Native Wan Node Outputs ===
+            } else if (sourceNodeType === "unetLoader" || sourceNodeType === "wanModelLoader") {
+                outputIndex = 0; // MODEL
+            } else if (sourceNodeType === "vaeLoader" || sourceNodeType === "wanVAELoader") {
+                outputIndex = 0; // VAE
+            } else if (sourceNodeType === "clipLoader" || sourceNodeType === "wanT5Loader") {
+                outputIndex = 0; // CLIP
+            } else if (sourceNodeType === "wanTextEncode") {
+                outputIndex = 0; // CONDITIONING
+            } else if (sourceNodeType === "wanI2V" || sourceNodeType === "wanLoader") {
+                // WanImageToVideo outputs: [positive, negative, latent]
+                if (sourceHandle === "positive") outputIndex = 0;
+                else if (sourceHandle === "negative") outputIndex = 1;
+                else if (sourceHandle === "latent") outputIndex = 2;
+                else if (sourceHandle === "image_embeds") outputIndex = 2; // legacy handle name → latent
+                else outputIndex = 2; // default to latent
+            } else if (sourceNodeType === "wanSampler" || sourceNodeType === "wanT2V") {
+                outputIndex = 0; // LATENT (it's a KSampler now)
+            } else if (sourceNodeType === "wanEmptyLatent") {
+                outputIndex = 0; // LATENT (EmptyHunyuanLatentVideo)
+            } else if (sourceNodeType === "wanDecode") {
+                outputIndex = 0; // IMAGE
             }
-
-            // Final fallback: if class is CLIPVisionLoader, it must be 0
-            if (sourceNode?.type === "clipVision") outputIndex = 0;
 
             targetNode.inputs[inputName] = [edge.source, outputIndex];
         }
