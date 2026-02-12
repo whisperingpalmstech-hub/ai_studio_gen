@@ -426,17 +426,25 @@ async function processJob(job: any) {
                 const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);
                 assetUrls.push(publicUrl);
 
-                // Create Asset record
-                await supabase
-                    .from('assets')
-                    .insert({
-                        user_id: job.user_id,
-                        job_id: job.id,
-                        type: isVideo ? 'video' : 'image',
-                        file_path: publicUrl,
-                        prompt: job.params.prompt,
-                        created_at: new Date().toISOString()
-                    });
+                // Create Asset record - ONLY if it's not an individual frame for a video job
+                // We want to avoid flooding the gallery with 81 private images for one video
+                const isVideoJob = job.type === 't2v' || job.type === 'i2v';
+                const shouldAddToGallery = !isVideoJob || isVideo;
+
+                if (shouldAddToGallery) {
+                    await supabase
+                        .from('assets')
+                        .insert({
+                            user_id: job.user_id,
+                            job_id: job.id,
+                            type: isVideo ? 'video' : 'image',
+                            file_path: publicUrl,
+                            prompt: job.params.prompt,
+                            created_at: new Date().toISOString()
+                        });
+                } else {
+                    console.log(`🖼️ Skipping gallery index for temporary frame: ${file.filename}`);
+                }
             }
         }
 
