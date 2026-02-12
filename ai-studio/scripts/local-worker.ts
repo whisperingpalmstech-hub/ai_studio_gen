@@ -1,0 +1,199 @@
+
+import { createClient } from '@supabase/supabase-js';
+import axios from 'axios';
+import FormData from 'form-data';
+import dotenv from 'dotenv';
+import { WebSocket } from 'ws';
+
+// Load environment variables
+dotenv.config({ path: 'apps/api/.env' });
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const COMFYUI_URL = process.env.COMFYUI_URL || 'http://127.0.0.1:8188';
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("❌ Missing Supabase configuration. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.");
+    process.exit(1);
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+console.log("🚀 Starting Local AI Worker...");
+console.log(`📍 Supabase: ${SUPABASE_URL}`);
+console.log(`📍 ComfyUI: ${COMFYUI_URL}`);
+
+// Import the workflow generator logic (Simplified for the script)
+const generateSimpleWorkflow = (params: any) => {
+    // This is a placeholder. In a real scenario, we'd import the actual generator
+    // For now, let's assume the params already contain the workflow or we handle it here.
+    const { type, prompt, negative_prompt, width, height, steps, cfg_scale, seed, sampler } = params;
+
+    // Minimal txt2img workflow for demonstration
+    // Note: This would usually be more complex based on the actual app logic
+    return {
+        "3": {
+            "class_type": "KSampler",
+            "inputs": {
+                "cfg": cfg_scale || 7.5,
+                "denoise": 1,
+                "latent_image": ["5", 0],
+                "model": ["4", 0],
+                "negative": ["7", 0],
+                "positive": ["6", 0],
+                "sampler_name": sampler || "euler",
+                "scheduler": "normal",
+                "seed": seed || Math.floor(Math.random() * 1000000),
+                "steps": steps || 20
+            }
+        },
+        "4": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "sd_xl_base_1.0.safetensors" } },
+        "5": { "class_type": "EmptyLatentImage", "inputs": { "batch_size": 1, "height": height || 1024, "width": width || 1024 } },
+        "6": { "class_type": "CLIPTextEncode", "inputs": { "clip": ["4", 1], "text": prompt } },
+        "7": { "class_type": "CLIPTextEncode", "inputs": { "clip": ["4", 1], "text": negative_prompt || "" } },
+        "8": { "class_type": "VAEDecode", "inputs": { "samples": ["3", 0], "vae": ["4", 2] } },
+        "9": { "class_type": "SaveImage", "inputs": { "filename_prefix": "AiStudio", "images": ["8", 0] } }
+    };
+};
+
+// Main processing loop
+async function pollForJobs() {
+    console.log("🔍 Checking for pending jobs...");
+
+    const { data: jobs, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+    if (error) {
+        console.error("❌ Error fetching jobs:", error.message);
+        return;
+    }
+
+    if (jobs && jobs.length > 0) {
+        const job = jobs[0];
+        await processJob(job);
+    }
+}
+
+async function processJob(job: any) {
+    console.log(`📦 Processing Job ${job.id} (${job.type})`);
+
+    try {
+        // 1. Mark as processing
+        await supabase.from('jobs').update({ status: 'processing', started_at: new Date().toISOString() }).eq('id', job.id);
+
+        // 2. Prepare Workflow
+        // In a real implementation, we should import 'generateSimpleWorkflow' from the actual utils
+        // For now, let's assume the params might be enough or we use a helper.
+        let workflow = job.params.workflow;
+        if (!workflow) {
+            // If no workflow is provided (txt2img/img2img), generate one
+            // This would normally use the generator from apps/api/src/utils/simple-workflow-generator.ts
+            // For now, we'll try to reach out to that logic if we can, or use the placeholder.
+            console.log("Generating simple workflow...");
+            workflow = generateSimpleWorkflow(job.params);
+        }
+
+        // 3. Send to ComfyUI
+        const clientId = "local-worker-" + Math.random().toString(36).substring(7);
+        const response = await axios.post(`${COMFYUI_URL}/prompt`, {
+            prompt: workflow,
+            client_id: clientId
+        });
+
+        const promptId = response.data.prompt_id;
+        console.log(`🚀 Queued in ComfyUI: ${promptId}`);
+
+        // 4. Listen for completion (via polling for simplicity in this script)
+        let completed = false;
+        let outputs = null;
+
+        while (!completed) {
+            const historyRes = await axios.get(`${COMFYUI_URL}/history/${promptId}`);
+            const history = historyRes.data[promptId];
+
+            if (history && history.status && history.status.completed) {
+                completed = true;
+                outputs = history.outputs;
+                console.log("✅ ComfyUI task completed");
+            } else if (history && history.status && history.status.status_str === 'error') {
+                throw new Error("ComfyUI Execution Error: " + JSON.stringify(history.status.messages));
+            } else {
+                // Wait 1s
+                await new Promise(r => setTimeout(r, 1000));
+
+                // Optional: Update progress based on some logic or another call
+                // For now, we rely on the ComfyUI-WS integration in the web app if it's still running,
+                // but since this is a standalone worker, we should update Supabase here.
+            }
+        }
+
+        // 5. Process and Upload Outputs
+        const assetIds: string[] = [];
+        for (const nodeId of Object.keys(outputs)) {
+            const nodeOutput = outputs[nodeId];
+            if (nodeOutput.images) {
+                for (const img of nodeOutput.images) {
+                    const imgRes = await axios.get(`${COMFYUI_URL}/view`, {
+                        params: { filename: img.filename, subfolder: img.subfolder, type: img.type },
+                        responseType: 'arraybuffer'
+                    });
+
+                    const buffer = Buffer.from(imgRes.data);
+                    const storagePath = `generations/${job.user_id}/${job.id}/${img.filename}`;
+
+                    const { error: uploadError } = await supabase.storage
+                        .from('assets')
+                        .upload(storagePath, buffer, { contentType: 'image/png', upsert: true });
+
+                    if (uploadError) throw uploadError;
+
+                    const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);
+
+                    // Create Asset record
+                    const { data: asset, error: assetError } = await supabase
+                        .from('assets')
+                        .insert({
+                            user_id: job.user_id,
+                            job_id: job.id,
+                            type: 'image',
+                            file_path: publicUrl,
+                            prompt: job.params.prompt,
+                            created_at: new Date().toISOString()
+                        })
+                        .select()
+                        .single();
+
+                    if (assetError) throw assetError;
+                    assetIds.push(asset.id);
+                }
+            }
+        }
+
+        // 6. Complete Job
+        await supabase.from('jobs').update({
+            status: 'completed',
+            progress: 100,
+            outputs: assetIds,
+            completed_at: new Date().toISOString()
+        }).eq('id', job.id);
+
+        console.log(`✨ Job ${job.id} finished successfully`);
+
+    } catch (err: any) {
+        console.error(`❌ Job ${job.id} failed:`, err.message);
+        await supabase.from('jobs').update({
+            status: 'failed',
+            error_message: err.message,
+            completed_at: new Date().toISOString()
+        }).eq('id', job.id);
+    }
+}
+
+// Polling interval
+setInterval(pollForJobs, 3000);
+
+pollForJobs();

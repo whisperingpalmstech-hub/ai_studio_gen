@@ -98,8 +98,8 @@ export default function GeneratePage() {
 
                     const fetchAsset = async () => {
                         const supabase = getSupabaseClient();
-                        const { data: asset } = await supabase
-                            .from('assets')
+                        const { data: asset } = await (supabase
+                            .from('assets') as any)
                             .select('file_path')
                             .eq('job_id', realtimeJobUpdate.id)
                             .maybeSingle();
@@ -151,8 +151,8 @@ export default function GeneratePage() {
 
             if (data) {
                 setAvailableModels(data);
-                const sdxl = data.find(m => m.base_model === 'sdxl');
-                const sd15 = data.find(m => m.base_model === 'sd15');
+                const sdxl = (data as any[]).find(m => m.base_model === 'sdxl');
+                const sd15 = (data as any[]).find(m => m.base_model === 'sd15');
                 setSelectedModel(sdxl || sd15 || data[0]);
             }
         };
@@ -176,8 +176,8 @@ export default function GeneratePage() {
 
             if (user) {
                 setUserId(user.id);
-                const { data: profile } = await supabase
-                    .from("profiles")
+                const { data: profile } = await (supabase
+                    .from("profiles") as any)
                     .select("credits")
                     .eq("id", user.id)
                     .single();

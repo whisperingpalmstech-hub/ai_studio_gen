@@ -12,8 +12,8 @@ export function useCredits() {
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
-                const { data: profile, error } = await supabase
-                    .from('profiles')
+                const { data: profile, error } = await (supabase
+                    .from('profiles') as any)
                     .select('credits, tier')
                     .eq('id', user.id)
                     .single();
@@ -22,8 +22,8 @@ export function useCredits() {
                 if (error && error.code === 'PGRST116') {
                     await fetch('/api/user/init', { method: 'POST' });
                     // Retry
-                    const { data: newProfile } = await supabase
-                        .from('profiles')
+                    const { data: newProfile } = await (supabase
+                        .from('profiles') as any)
                         .select('credits, tier')
                         .eq('id', user.id)
                         .single();

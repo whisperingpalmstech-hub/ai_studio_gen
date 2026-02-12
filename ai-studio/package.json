@@ -13,7 +13,8 @@
     "db:migrate": "supabase db push",
     "db:generate": "supabase gen types typescript --local > packages/database/types.ts",
     "db:reset": "supabase db reset",
-    "db:studio": "supabase studio"
+    "db:studio": "supabase studio",
+    "worker": "tsx scripts/local-worker.ts"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
@@ -27,5 +28,13 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "axios": "^1.13.5",
+    "dotenv": "^16.3.1",
+    "form-data": "^4.0.5",
+    "tsx": "^4.7.0",
+    "ws": "^8.19.0"
+  }
 }

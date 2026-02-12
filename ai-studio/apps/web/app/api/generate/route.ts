@@ -18,73 +18,69 @@ export async function POST(request: Request) {
         const {
             prompt,
             negative_prompt,
-            num_inference_steps = 20,
+            num_inference_steps = 30,
             guidance_scale = 7.5,
-            width = 512,
-            height = 512,
+            width = 1024,
+            height = 1024,
             seed = -1,
-            sampler = "euler_a",
+            sampler = "Euler a",
             model_id,
-            image,
-            video_frames,
-            fps
+            video_frames = 81,
+            fps = 16,
         } = body;
 
-        // 3. Construct Payload for Local API
-        // Map frontend params to backend execution params
-        const jobPayload = {
-            type: body.type || "txt2img",
+        // 3. Prepare Job Data
+        const jobType = body.type || "txt2img";
+        const jobParams = {
             prompt,
             negative_prompt,
             width,
             height,
             steps: num_inference_steps,
             cfg_scale: guidance_scale,
-            seed,
+            seed: seed === -1 ? Math.floor(Math.random() * 1000000000) : seed,
             sampler,
             model_id,
             video_frames,
             fps,
-            // Add other potential params
-            image_url: body.image, // For img2img/inpaint
-            mask_url: body.mask,   // For inpaint
+            image_url: body.image,
+            mask_url: body.mask,
             denoising_strength: body.denoising_strength,
             workflow: body.workflow,
         };
 
-        // 4. Submit to Local API
-        const API_URL = process.env.API_URL || "http://localhost:4000/api/v1";
+        // 4. Insert Job into Supabase (acts as the queue)
+        const { data: job, error: jobError } = await (supabase
+            .from("jobs") as any)
+            .insert({
+                user_id: user.id,
+                type: jobType,
+                status: "pending",
+                params: jobParams,
+                progress: 0,
+                created_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
 
-        console.log("Submitting job to:", `${API_URL}/jobs`);
-
-        const response = await fetch(`${API_URL}/jobs`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify(jobPayload),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Local API Error:", errorText);
+        if (jobError) {
+            console.error("Failed to create job in Supabase:", jobError);
             return NextResponse.json(
-                { error: `Job submission failed: ${response.statusText}`, details: errorText },
-                { status: response.status }
+                { error: "Failed to queue job" },
+                { status: 500 }
             );
         }
 
-        const jobParam = await response.json();
-
+        // 5. Notify the user
         return NextResponse.json({
             success: true,
-            jobId: jobParam.id,
-            status: "queued"
+            jobId: job.id,
+            status: "pending",
+            message: "Job queued successfully. Local worker will process it shortly."
         });
 
     } catch (error: any) {
-        console.error("Generation proxy error:", error);
+        console.error("Generation error:", error);
         return NextResponse.json(
             { error: error.message || "Failed to submit generation job" },
             { status: 500 }

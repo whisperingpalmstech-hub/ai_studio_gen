@@ -88,8 +88,8 @@ export default function GenerateVideoPage() {
             if (realtimeJobUpdate.status === 'completed') {
                 const fetchAsset = async () => {
                     const supabase = getSupabaseClient();
-                    const { data: asset } = await supabase
-                        .from('assets')
+                    const { data: asset } = await (supabase
+                        .from('assets') as any)
                         .select('file_path')
                         .eq('job_id', realtimeJobUpdate.id)
                         .maybeSingle();
@@ -137,7 +137,7 @@ export default function GenerateVideoPage() {
                 .order("is_system", { ascending: false });
 
             if (data) {
-                const wanModels = data.filter(m => m.name.toLowerCase().includes('wan') || m.file_path.toLowerCase().includes('wan'));
+                const wanModels = (data as any[]).filter(m => m.name.toLowerCase().includes('wan') || m.file_path.toLowerCase().includes('wan'));
                 setAvailableModels(wanModels);
 
                 // Set default Wan model
@@ -158,8 +158,8 @@ export default function GenerateVideoPage() {
 
             if (user) {
                 setUserId(user.id);
-                const { data: profile } = await supabase
-                    .from("profiles")
+                const { data: profile } = await (supabase
+                    .from("profiles") as any)
                     .select("credits")
                     .eq("id", user.id)
                     .single();
