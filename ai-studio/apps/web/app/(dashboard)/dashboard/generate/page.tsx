@@ -76,32 +76,36 @@ export default function GeneratePage() {
     const { lastUpdate: realtimeJobUpdate } = useJobRealtime(userId || undefined);
 
     useEffect(() => {
-        if (realtimeJobUpdate && isGenerating) {
-            console.log("Realtime Job Update:", realtimeJobUpdate);
+        const update = realtimeJobUpdate as any;
+        if (update && isGenerating) {
+            console.log("Realtime Job Update:", update);
 
-            if (realtimeJobUpdate.progress !== undefined) {
-                setProgress(realtimeJobUpdate.progress);
+            if (update.progress !== undefined) {
+                setProgress(update.progress);
             }
 
-            if (realtimeJobUpdate.current_node) {
-                setStatusMessage(`Processing: ${realtimeJobUpdate.current_node} (${realtimeJobUpdate.progress}%)`);
+            if (update.status_message) {
+                setStatusMessage(update.status_message);
+            } else if (update.current_node) {
+                setStatusMessage(`Processing: ${update.current_node} (${update.progress}%)`);
             }
 
-            if (realtimeJobUpdate.status === 'completed') {
-                // If we have outputs, handles it
-                if (realtimeJobUpdate.outputs && Array.isArray(realtimeJobUpdate.outputs) && realtimeJobUpdate.outputs.length > 0) {
-                    // Logic to fetch the actual asset URL if needed, or if it's already in the job update
-                    // In our schema, job.outputs is JSONB array of asset IDs or URLs
-                    // If it's IDs, we might need to fetch the asset.
-                    // But usually the job-queue updates 'completed' and sends a WS message with the URL.
-                    // For Realtime, we might need a small delay or trust that the assets table is also updated.
+            if (update.status === 'completed') {
+                const firstOutput = Array.isArray(update.outputs) ? update.outputs[0] : null;
 
+                if (firstOutput && typeof firstOutput === 'string' && (firstOutput.startsWith('http') || firstOutput.startsWith('/'))) {
+                    setGeneratedImage(firstOutput);
+                    setIsGenerating(false);
+                    setProgress(100);
+                    setStatusMessage("Generation Complete!");
+                    setRefreshKey(prev => prev + 1);
+                } else if (update.outputs && Array.isArray(update.outputs) && update.outputs.length > 0) {
                     const fetchAsset = async () => {
                         const supabase = getSupabaseClient();
                         const { data: asset } = await (supabase
                             .from('assets') as any)
                             .select('file_path')
-                            .eq('job_id', realtimeJobUpdate.id)
+                            .eq('job_id', update.id)
                             .maybeSingle();
 
                         if (asset?.file_path) {
@@ -114,10 +118,10 @@ export default function GeneratePage() {
                     };
                     fetchAsset();
                 }
-            } else if (realtimeJobUpdate.status === 'failed') {
+            } else if (update.status === 'failed') {
                 setIsGenerating(false);
                 setProgress(0);
-                alert(`Job Failed: ${realtimeJobUpdate.error_message || 'Unknown error'}`);
+                alert(`Job Failed: ${update.error_message || 'Unknown error'}`);
             }
         }
     }, [realtimeJobUpdate, isGenerating]);

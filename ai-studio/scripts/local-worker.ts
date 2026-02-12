@@ -127,10 +127,17 @@ async function processJob(job: any) {
                     const progress = Math.round((message.data.value / message.data.max) * 100);
                     const status_message = `Generating... ${progress}%`;
                     console.log(`⏳ Job ${job.id} progress: ${progress}%`);
-                    await supabase.from('jobs').update({ progress, status_message }).eq('id', job.id);
+                    await supabase.from('jobs').update({
+                        progress,
+                        status_message,
+                        current_node: 'KSampler'
+                    }).eq('id', job.id);
                 } else if (message.type === 'executing' && message.data.node) {
                     const status_message = `Executing node: ${message.data.node}`;
-                    await supabase.from('jobs').update({ status_message }).eq('id', job.id);
+                    await supabase.from('jobs').update({
+                        status_message,
+                        current_node: message.data.node
+                    }).eq('id', job.id);
                 }
             } catch (e) {
                 // Ignore parse errors
@@ -176,7 +183,7 @@ async function processJob(job: any) {
         }
 
         // 5. Process and Upload Outputs
-        const assetIds: string[] = [];
+        const assetUrls: string[] = [];
         for (const nodeId of Object.keys(outputs)) {
             const nodeOutput = outputs[nodeId];
             if (nodeOutput.images) {
@@ -196,9 +203,10 @@ async function processJob(job: any) {
                     if (uploadError) throw uploadError;
 
                     const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(storagePath);
+                    assetUrls.push(publicUrl);
 
                     // Create Asset record
-                    const { data: asset, error: assetError } = await supabase
+                    await supabase
                         .from('assets')
                         .insert({
                             user_id: job.user_id,
@@ -207,12 +215,7 @@ async function processJob(job: any) {
                             file_path: publicUrl,
                             prompt: job.params.prompt,
                             created_at: new Date().toISOString()
-                        })
-                        .select()
-                        .single();
-
-                    if (assetError) throw assetError;
-                    assetIds.push(asset.id);
+                        });
                 }
             }
         }
@@ -221,7 +224,7 @@ async function processJob(job: any) {
         await supabase.from('jobs').update({
             status: 'completed',
             progress: 100,
-            outputs: assetIds,
+            outputs: assetUrls,
             completed_at: new Date().toISOString()
         }).eq('id', job.id);
 

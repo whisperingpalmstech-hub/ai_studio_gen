@@ -14,19 +14,20 @@ export function useJobRealtime(userId?: string) {
 
         const supabase = getSupabaseClient();
 
-        // 1. Subscribe to job changes for this user
+        // 1. Subscribe to job changes
         const channel = supabase
-            .channel(`public:jobs:user_id=eq.${userId}`)
+            .channel(`public:jobs`)
             .on(
                 'postgres_changes',
                 {
                     event: '*',
                     schema: 'public',
                     table: 'jobs',
-                    filter: `user_id=eq.${userId}`,
                 },
                 (payload) => {
                     const updatedJob = payload.new as Job;
+                    if (updatedJob.user_id !== userId) return;
+
                     setJobs((prev) => ({
                         ...prev,
                         [updatedJob.id]: updatedJob,
