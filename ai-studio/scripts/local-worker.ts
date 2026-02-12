@@ -120,22 +120,23 @@ async function processJob(job: any) {
         const wsUrl = COMFYUI_URL.replace(/^http/, 'ws') + `/ws?clientId=${clientId}`;
         const ws = new WebSocket(wsUrl);
 
+        ws.on('open', () => console.log(`🔌 WS connected to ComfyUI for job ${job.id}`));
+        ws.on('error', (err) => console.error(`🔌 WS Error:`, err));
+
         ws.on('message', async (data: any) => {
             try {
                 const message = JSON.parse(data.toString());
+                // Log progress/executing for debugging
                 if (message.type === 'progress') {
                     const progress = Math.round((message.data.value / message.data.max) * 100);
-                    const status_message = `Generating... ${progress}%`;
                     console.log(`⏳ Job ${job.id} progress: ${progress}%`);
                     await supabase.from('jobs').update({
                         progress,
-                        status_message,
                         current_node: 'KSampler'
                     }).eq('id', job.id);
                 } else if (message.type === 'executing' && message.data.node) {
-                    const status_message = `Executing node: ${message.data.node}`;
+                    console.log(`🎯 Executing node: ${message.data.node}`);
                     await supabase.from('jobs').update({
-                        status_message,
                         current_node: message.data.node
                     }).eq('id', job.id);
                 }
