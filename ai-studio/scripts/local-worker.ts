@@ -25,12 +25,28 @@ console.log(`📍 ComfyUI: ${COMFYUI_URL}`);
 
 // Import the workflow generator logic (Simplified for the script)
 const generateSimpleWorkflow = (params: any) => {
-    // This is a placeholder. In a real scenario, we'd import the actual generator
-    // For now, let's assume the params already contain the workflow or we handle it here.
-    const { type, prompt, negative_prompt, width, height, steps, cfg_scale, seed, sampler } = params;
+    const { type, prompt, negative_prompt, width, height, steps, cfg_scale, seed, sampler, model_id } = params;
 
-    // Minimal txt2img workflow for demonstration
-    // Note: This would usually be more complex based on the actual app logic
+    // Map sampler names to ComfyUI internal names
+    const samplerMap: Record<string, string> = {
+        "Euler a": "euler_ancestral",
+        "euler_a": "euler_ancestral",
+        "Euler": "euler",
+        "LMS": "lms",
+        "Heun": "heun",
+        "DPM2": "dpm_2",
+        "DPM2 a": "dpm_2_ancestral",
+        "DPM++ 2S a": "dpmpp_2s_ancestral",
+        "DPM++ 2M": "dpmpp_2m",
+        "DPM++ SDE": "dpmpp_sde",
+        "DPM++ 2M SDE": "dpmpp_2m_sde",
+        "DDIM": "ddim",
+        "UniPC": "uni_pc"
+    };
+
+    const comfySampler = samplerMap[sampler] || "euler";
+    const ckptName = model_id || "sd_xl_base_1.0.safetensors";
+
     return {
         "3": {
             "class_type": "KSampler",
@@ -41,13 +57,13 @@ const generateSimpleWorkflow = (params: any) => {
                 "model": ["4", 0],
                 "negative": ["7", 0],
                 "positive": ["6", 0],
-                "sampler_name": sampler || "euler",
+                "sampler_name": comfySampler,
                 "scheduler": "normal",
                 "seed": seed || Math.floor(Math.random() * 1000000),
                 "steps": steps || 20
             }
         },
-        "4": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "sd_xl_base_1.0.safetensors" } },
+        "4": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": ckptName } },
         "5": { "class_type": "EmptyLatentImage", "inputs": { "batch_size": 1, "height": height || 1024, "width": width || 1024 } },
         "6": { "class_type": "CLIPTextEncode", "inputs": { "clip": ["4", 1], "text": prompt } },
         "7": { "class_type": "CLIPTextEncode", "inputs": { "clip": ["4", 1], "text": negative_prompt || "" } },
