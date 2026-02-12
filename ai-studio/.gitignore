@@ -53,7 +53,7 @@ venv/
 *.ckpt
 *.pt
 *.pth
-models/
+# models/ is removed as it conflicts with the models page in Next.js
 
 # Generated assets
 uploads/

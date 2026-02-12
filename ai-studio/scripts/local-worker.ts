@@ -45,7 +45,24 @@ const generateSimpleWorkflow = (params: any) => {
     };
 
     const comfySampler = samplerMap[sampler] || "euler";
-    const ckptName = model_id || "sd_xl_base_1.0.safetensors";
+    // Default model if nothing provided
+    let ckptName = model_id || "sd_xl_base_1.0.safetensors";
+
+    // Detect video models or other specialized models and adjust workflow if needed
+    // For now, just ensure the checkpoint exists in a known good set or use a default
+    const knownGoodCheckpoints = [
+        'realistic-vision-inpaint.safetensors',
+        'sd-v1-5-inpainting.safetensors',
+        'sd_xl_base_1.0.safetensors',
+        'svd.safetensors',
+        'svd_xt.safetensors',
+        'v1-5-pruned-emaonly.safetensors'
+    ];
+
+    if (!knownGoodCheckpoints.includes(ckptName)) {
+        console.warn(`⚠️ Model "${ckptName}" not found in ComfyUI list. Falling back to default.`);
+        ckptName = "sd_xl_base_1.0.safetensors";
+    }
 
     return {
         "3": {
@@ -271,6 +288,6 @@ async function processJob(job: any) {
 }
 
 // Polling interval
-setInterval(pollForJobs, 3000);
+setInterval(pollForJobs, 1000);
 
 pollForJobs();

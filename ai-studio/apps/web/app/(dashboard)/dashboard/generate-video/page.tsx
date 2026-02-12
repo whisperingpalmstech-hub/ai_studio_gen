@@ -67,10 +67,88 @@ export default function GenerateVideoPage() {
     const [statusMessage, setStatusMessage] = useState("");
 
     const [refreshKey, setRefreshKey] = useState(0);
+    const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+    const [userId, setUserId] = useState<string | null>(null);
+
+    // Polling fallback
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+
+        const poll = async () => {
+            if (!isGenerating) return;
+
+            const supabase = getSupabaseClient();
+            let targetId = currentJobId;
+
+            // Recovery logic
+            if (!targetId && userId) {
+                const { data: latestJob } = await (supabase
+                    .from('jobs') as any)
+                    .select('id')
+                    .eq('user_id', userId)
+                    .in('status', ['pending', 'processing', 'queued'])
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (latestJob) {
+                    setCurrentJobId(latestJob.id);
+                    targetId = latestJob.id;
+                } else {
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+
+            if (targetId) {
+                const { data: job, error } = await (supabase
+                    .from('jobs') as any)
+                    .select('*')
+                    .eq('id', targetId)
+                    .single();
+
+                if (job) {
+                    const update = job as any;
+
+                    setProgress(prev => {
+                        if (update.progress !== undefined && update.progress > prev) return update.progress;
+                        return prev;
+                    });
+
+                    if (update.current_node) {
+                        setStatusMessage(`Process: ${update.current_node} (${update.progress}%)`);
+                    }
+
+                    if (update.status === 'completed') {
+                        const firstOutput = Array.isArray(update.outputs) ? update.outputs[0] : null;
+                        if (firstOutput) {
+                            setGeneratedImage(firstOutput);
+                            setIsGenerating(false);
+                            setProgress(100);
+                            setStatusMessage("Video Rendering Complete!");
+                            setCurrentJobId(null);
+                        }
+                    } else if (update.status === 'failed') {
+                        setIsGenerating(false);
+                        setCurrentJobId(null);
+                        alert(`Video Generation Failed: ${update.error_message || 'Internal error'}`);
+                    }
+                }
+            }
+        };
+
+        if (isGenerating) {
+            poll();
+            interval = setInterval(poll, 2000);
+        }
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isGenerating, currentJobId, userId]);
 
     // WebSocket
     const { status: wsStatus, lastMessage } = useWebSocket();
-    const [userId, setUserId] = useState<string | null>(null);
     const { lastUpdate: realtimeJobUpdate } = useJobRealtime(userId || undefined);
 
     useEffect(() => {
@@ -78,14 +156,14 @@ export default function GenerateVideoPage() {
             console.log("Realtime Video Job Update:", realtimeJobUpdate);
 
             if (realtimeJobUpdate.progress !== undefined) {
-                setProgress(realtimeJobUpdate.progress);
+                setProgress(prev => Math.max(prev, realtimeJobUpdate.progress));
             }
 
             if (realtimeJobUpdate.current_node) {
                 setStatusMessage(`Rendering: ${realtimeJobUpdate.current_node} (${realtimeJobUpdate.progress}%)`);
             }
 
-            if (realtimeJobUpdate.status === 'completed') {
+            if (realtimeJobUpdate.status === 'completed' && (realtimeJobUpdate.id === currentJobId || !currentJobId)) {
                 const fetchAsset = async () => {
                     const supabase = getSupabaseClient();
                     const { data: asset } = await (supabase
@@ -223,6 +301,7 @@ export default function GenerateVideoPage() {
 
             if (data.status === "queued" || data.jobId) {
                 setStatusMessage("Job submitted to cinematic queue...");
+                if (data.jobId) setCurrentJobId(data.jobId);
             } else {
                 throw new Error("No video job ID returned from API");
             }
