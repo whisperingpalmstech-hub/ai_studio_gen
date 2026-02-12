@@ -262,8 +262,8 @@ async function processJob(job: any) {
             // If no workflow is provided (txt2img/img2img), generate one
             // This would normally use the generator from apps/api/src/utils/simple-workflow-generator.ts
             // For now, we'll try to reach out to that logic if we can, or use the placeholder.
-            console.log("Generating simple workflow...");
-            workflow = generateSimpleWorkflow(job.params);
+            console.log("Generating simple workflow for type:", job.type);
+            workflow = generateSimpleWorkflow({ ...job.params, type: job.type });
         }
 
         // 3. Send to ComfyUI
