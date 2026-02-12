@@ -115,15 +115,46 @@ async function processJob(job: any) {
 
         // 3. Send to ComfyUI
         const clientId = "local-worker-" + Math.random().toString(36).substring(7);
-        const response = await axios.post(`${COMFYUI_URL}/prompt`, {
-            prompt: workflow,
-            client_id: clientId
+
+        // Setup WebSocket for progress
+        const wsUrl = COMFYUI_URL.replace(/^http/, 'ws') + `/ws?clientId=${clientId}`;
+        const ws = new WebSocket(wsUrl);
+
+        ws.on('message', async (data: any) => {
+            try {
+                const message = JSON.parse(data.toString());
+                if (message.type === 'progress') {
+                    const progress = Math.round((message.data.value / message.data.max) * 100);
+                    const status_message = `Generating... ${progress}%`;
+                    console.log(`⏳ Job ${job.id} progress: ${progress}%`);
+                    await supabase.from('jobs').update({ progress, status_message }).eq('id', job.id);
+                } else if (message.type === 'executing' && message.data.node) {
+                    const status_message = `Executing node: ${message.data.node}`;
+                    await supabase.from('jobs').update({ status_message }).eq('id', job.id);
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
         });
 
-        const promptId = response.data.prompt_id;
-        console.log(`🚀 Queued in ComfyUI: ${promptId}`);
+        let promptId;
+        try {
+            const response = await axios.post(`${COMFYUI_URL}/prompt`, {
+                prompt: workflow,
+                client_id: clientId
+            });
+            promptId = response.data.prompt_id;
+            console.log(`🚀 Queued in ComfyUI: ${promptId}`);
+        } catch (axiosErr: any) {
+            ws.close();
+            if (axiosErr.response && axiosErr.response.data) {
+                console.error("❌ ComfyUI Validation Error:", JSON.stringify(axiosErr.response.data));
+                throw new Error(`ComfyUI Error: ${JSON.stringify(axiosErr.response.data)}`);
+            }
+            throw axiosErr;
+        }
 
-        // 4. Listen for completion (via polling for simplicity in this script)
+        // 4. Listen for completion
         let completed = false;
         let outputs = null;
 
@@ -135,15 +166,12 @@ async function processJob(job: any) {
                 completed = true;
                 outputs = history.outputs;
                 console.log("✅ ComfyUI task completed");
+                ws.close();
             } else if (history && history.status && history.status.status_str === 'error') {
+                ws.close();
                 throw new Error("ComfyUI Execution Error: " + JSON.stringify(history.status.messages));
             } else {
-                // Wait 1s
                 await new Promise(r => setTimeout(r, 1000));
-
-                // Optional: Update progress based on some logic or another call
-                // For now, we rely on the ComfyUI-WS integration in the web app if it's still running,
-                // but since this is a standalone worker, we should update Supabase here.
             }
         }
 
