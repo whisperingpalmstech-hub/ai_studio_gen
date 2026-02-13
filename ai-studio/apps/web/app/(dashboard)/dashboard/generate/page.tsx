@@ -71,6 +71,9 @@ export default function GeneratePage() {
     const [refreshKey, setRefreshKey] = useState(0);
     const [currentJobId, setCurrentJobId] = useState<string | null>(null);
     const [userId, setUserId] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
+    const [uploadedMaskFilename, setUploadedMaskFilename] = useState<string | null>(null);
 
     // Persist prompt and basic settings to localStorage
     useEffect(() => {
@@ -378,21 +381,60 @@ export default function GeneratePage() {
         fetchCredits();
     }, []);
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "mask") => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "mask") => {
         const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                if (type === "image") setInputImage(event.target?.result as string);
-                else setMaskImage(event.target?.result as string);
-            };
-            reader.readAsDataURL(file);
+        if (!file) return;
+
+        // 1. Preview for UI
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            if (type === "image") setInputImage(event.target?.result as string);
+            else setMaskImage(event.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+
+        // 2. Enterprise Upload to API Server
+        setIsUploading(true);
+        setStatusMessage(`Uploading ${type}...`);
+
+        try {
+            const formData = new FormData();
+            formData.append("image", file);
+
+            const supabase = getSupabaseClient();
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error("Not authenticated");
+
+            // Direct upload to the Express API
+            const response = await fetch("http://localhost:4000/api/v1/uploads/image", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${session.access_token}`
+                },
+                body: formData
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                console.log(`✅ Upload success: ${data.filename}`);
+                if (type === "image") setUploadedFilename(data.filename);
+                else setUploadedMaskFilename(data.filename);
+                setStatusMessage(`Upload complete.`);
+            } else {
+                throw new Error(data.message || "Upload failed");
+            }
+        } catch (error: any) {
+            console.error("Upload error:", error);
+            setStatusMessage(`Upload failed: ${error.message}`);
+        } finally {
+            setIsUploading(false);
         }
     };
 
     const handleGenerate = async () => {
         if (!prompt.trim() && (mode === "txt2img" || mode === "t2v")) return;
         if (!inputImage && (mode === "img2img" || mode === "inpaint" || mode === "upscale" || mode === "i2v")) return;
+        if (isUploading) return;
 
         setIsGenerating(true);
         setGeneratedImage(null);
@@ -422,6 +464,8 @@ export default function GeneratePage() {
                     seed: seed === -1 ? undefined : seed,
                     image: inputImage,
                     mask: maskImage,
+                    image_filename: uploadedFilename,
+                    mask_filename: uploadedMaskFilename,
                     denoising_strength: denoisingStrength,
                     upscale_factor: upscaleFactor,
                     model_id: selectedModel?.file_path
@@ -1007,7 +1051,7 @@ export default function GeneratePage() {
                     {/* Generate Button */}
                     <button
                         onClick={handleGenerate}
-                        disabled={isGenerating || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)}
+                        disabled={isGenerating || isUploading || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)}
                         style={{
                             width: '100%',
                             display: 'flex',
@@ -1019,10 +1063,10 @@ export default function GeneratePage() {
                             fontSize: '1rem',
                             fontWeight: 600,
                             border: 'none',
-                            cursor: (isGenerating || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)) ? 'not-allowed' : 'pointer',
+                            cursor: (isGenerating || isUploading || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)) ? 'not-allowed' : 'pointer',
                             background: 'linear-gradient(135deg, #6366f1, #a855f7)',
                             color: 'white',
-                            opacity: (isGenerating || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)) ? 0.7 : 1,
+                            opacity: (isGenerating || isUploading || ((mode === "txt2img" || mode === "t2v") && !prompt.trim()) || ((mode === "img2img" || mode === "upscale" || mode === "i2v") && !inputImage)) ? 0.7 : 1,
                             boxShadow: '0 10px 40px rgba(99, 102, 241, 0.3)',
                             marginBottom: '1rem'
                         }}
@@ -1031,6 +1075,11 @@ export default function GeneratePage() {
                             <>
                                 <Loader2 className="animate-spin" style={{ width: '1.25rem', height: '1.25rem' }} />
                                 Generating...
+                            </>
+                        ) : isUploading ? (
+                            <>
+                                <Loader2 className="animate-spin" style={{ width: '1.25rem', height: '1.25rem' }} />
+                                Uploading Image...
                             </>
                         ) : (
                             <>

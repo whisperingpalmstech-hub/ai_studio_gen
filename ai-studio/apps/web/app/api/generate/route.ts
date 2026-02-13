@@ -45,6 +45,8 @@ export async function POST(request: Request) {
             fps,
             image_url: body.image,
             mask_url: body.mask,
+            image_filename: body.image_filename,
+            mask_filename: body.mask_filename,
             denoising_strength: body.denoising_strength,
             workflow: body.workflow,
         };

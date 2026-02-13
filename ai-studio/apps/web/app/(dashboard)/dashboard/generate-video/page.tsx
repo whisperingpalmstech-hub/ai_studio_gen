@@ -69,6 +69,8 @@ export default function GenerateVideoPage() {
     const [refreshKey, setRefreshKey] = useState(0);
     const [currentJobId, setCurrentJobId] = useState<string | null>(null);
     const [userId, setUserId] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
 
     // Persist prompt and settings to localStorage
     useEffect(() => {
@@ -329,20 +331,57 @@ export default function GenerateVideoPage() {
         fetchCredits();
     }, []);
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                setInputImage(event.target?.result as string);
-            };
-            reader.readAsDataURL(file);
+        if (!file) return;
+
+        // 1. Preview
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            setInputImage(event.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+
+        // 2. Enterprise Upload
+        setIsUploading(true);
+        setStatusMessage("Uploading cinematic base...");
+
+        try {
+            const formData = new FormData();
+            formData.append("image", file);
+
+            const supabase = getSupabaseClient();
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error("Not authenticated");
+
+            const response = await fetch("http://localhost:4000/api/v1/uploads/image", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${session.access_token}`
+                },
+                body: formData
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                console.log(`✅ Upload success: ${data.filename}`);
+                setUploadedFilename(data.filename);
+                setStatusMessage("Reference image uploaded.");
+            } else {
+                throw new Error(data.message || "Upload failed");
+            }
+        } catch (error: any) {
+            console.error("Upload error:", error);
+            setStatusMessage(`Upload failed: ${error.message}`);
+        } finally {
+            setIsUploading(false);
         }
     };
 
     const handleGenerate = async () => {
         if (!prompt.trim() && mode === "t2v") return;
         if (!inputImage && mode === "i2v") return;
+        if (isUploading) return;
 
         setIsGenerating(true);
         setGeneratedImage(null);
@@ -365,6 +404,7 @@ export default function GenerateVideoPage() {
                     guidance_scale: cfgScale,
                     seed: seed === -1 ? undefined : seed,
                     image: inputImage,
+                    image_filename: uploadedFilename,
                     video_frames: videoFrames,
                     fps: videoFps,
                     model_id: selectedModel?.file_path
@@ -830,7 +870,7 @@ export default function GenerateVideoPage() {
                     {/* Generate Button */}
                     <button
                         onClick={handleGenerate}
-                        disabled={isGenerating || (mode === "t2v" && !prompt.trim()) || (mode === "i2v" && !inputImage)}
+                        disabled={isGenerating || isUploading || (mode === "t2v" && !prompt.trim()) || (mode === "i2v" && !inputImage)}
                         style={{
                             width: '100%',
                             display: 'flex',
@@ -842,10 +882,10 @@ export default function GenerateVideoPage() {
                             fontSize: '1.125rem',
                             fontWeight: 700,
                             border: 'none',
-                            cursor: (isGenerating || (mode === "t2v" && !prompt.trim()) || (mode === "i2v" && !inputImage)) ? 'not-allowed' : 'pointer',
+                            cursor: (isGenerating || isUploading || (mode === "t2v" && !prompt.trim()) || (mode === "i2v" && !inputImage)) ? 'not-allowed' : 'pointer',
                             background: 'linear-gradient(135deg, #a855f7, #6366f1)',
                             color: 'white',
-                            opacity: (isGenerating || (mode === "t2v" && !prompt.trim()) || (mode === "i2v" && !inputImage)) ? 0.6 : 1,
+                            opacity: (isGenerating || isUploading || (mode === "t2v" && !prompt.trim()) || (mode === "i2v" && !inputImage)) ? 0.6 : 1,
                             boxShadow: '0 12px 30px rgba(168, 85, 247, 0.3)',
                             marginTop: '0.5rem',
                             transition: 'all 0.3s ease'
@@ -855,6 +895,11 @@ export default function GenerateVideoPage() {
                             <>
                                 <Loader2 size={24} className="animate-spin" />
                                 Processing Cinematic Output...
+                            </>
+                        ) : isUploading ? (
+                            <>
+                                <Loader2 size={24} className="animate-spin" />
+                                Uploading Reference...
                             </>
                         ) : (
                             <>

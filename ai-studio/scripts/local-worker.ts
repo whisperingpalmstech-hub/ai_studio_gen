@@ -369,38 +369,54 @@ async function processJob(job: any) {
         // 1. Mark as processing
         await supabase.from('jobs').update({ status: 'processing', started_at: new Date().toISOString() }).eq('id', job.id);
 
-        // 2. Prepare Workflow
-        let imageFilename = "";
-        // If image is a data URL, upload it first
-        if (job.params.image && typeof job.params.image === 'string' && job.params.image.startsWith("data:image")) {
-            // Enterprise: Use unique jobId for the filename to prevent collision and verify persistence
-            imageFilename = `${job.id}.png`;
-            await uploadImageToComfy(job.params.image, imageFilename);
-        } else if (job.params.image_filename) {
-            imageFilename = job.params.image_filename;
-        }
+        // 2. Enterprise Image Preparation
+        let imageFilename = job.params.image_filename;
+        let maskFilename = job.params.mask_filename;
 
-        let maskFilename = "";
-        if (job.params.mask && typeof job.params.mask === 'string' && job.params.mask.startsWith("data:image")) {
-            maskFilename = `mask_${job.id}.png`;
-            await uploadImageToComfy(job.params.mask, maskFilename);
-        } else if (job.params.mask_filename) {
-            maskFilename = job.params.mask_filename;
-        }
-
-        // Verify file existence for img2img/i2v
+        // Strict Enterprise Validation: Ensure required files exist on disk
         if (["img2img", "inpaint", "upscale", "i2v"].includes(job.type)) {
-            const fullPath = path.join(COMFYUI_INPUT_DIR, imageFilename || "none");
-            if (!fs.existsSync(fullPath)) {
-                console.error(`❌ File not found: ${fullPath}`);
-                throw new Error(`Enterprise Validation Error: Input image ${imageFilename} was not found on disk at ${fullPath}. Cannot proceed with ${job.type} job.`);
+            if (!imageFilename) {
+                // Legacy Fallback (Migration Period Only): Upload if dataURL exists but filename is missing
+                if (job.params.image && typeof job.params.image === 'string' && job.params.image.startsWith("data:image")) {
+                    imageFilename = `${job.id}.png`;
+                    console.log(`📡 Legacy Upload Detected: Processing base64 as ${imageFilename}`);
+                    await uploadImageToComfy(job.params.image, imageFilename);
+                } else if (job.params.image_url && typeof job.params.image_url === 'string' && job.params.image_url.startsWith("data:image")) {
+                    imageFilename = `${job.id}.png`;
+                    console.log(`📡 Legacy Upload Detected: Processing base64 image_url as ${imageFilename}`);
+                    await uploadImageToComfy(job.params.image_url, imageFilename);
+                } else {
+                    throw new Error(`Enterprise Integrity Error: Job type '${job.type}' requires an image_filename but none was provided and no source data found.`);
+                }
             }
-            console.log(`✅ Input verified: ${fullPath} (${fs.statSync(fullPath).size} bytes)`);
+
+            const imagePath = path.join(COMFYUI_INPUT_DIR, imageFilename);
+            if (!fs.existsSync(imagePath)) {
+                throw new Error(`Enterprise File System Error: Required input file '${imageFilename}' missing from storage (${imagePath}).`);
+            }
+            console.log(`✅ Input Verified: ${imageFilename} exists and is ready.`);
+        }
+
+        // Handle Mask for Inpainting
+        if (job.type === "inpaint") {
+            if (!maskFilename) {
+                if (job.params.mask && typeof job.params.mask === 'string' && job.params.mask.startsWith("data:image")) {
+                    maskFilename = `mask_${job.id}.png`;
+                    await uploadImageToComfy(job.params.mask, maskFilename);
+                } else {
+                    throw new Error(`Enterprise Integrity Error: Inpaint job requires a mask_filename.`);
+                }
+            }
+            const maskPath = path.join(COMFYUI_INPUT_DIR, maskFilename);
+            if (!fs.existsSync(maskPath)) {
+                throw new Error(`Enterprise File System Error: Required mask file '${maskFilename}' missing from storage.`);
+            }
+            console.log(`✅ Mask Verified: ${maskFilename} exists.`);
         }
 
         let workflow = job.params.workflow;
         if (!workflow) {
-            console.log("Generating simple workflow for type:", job.type);
+            console.log(`🛠️ Building Enterprise Workflow for: ${job.type}`);
             workflow = generateSimpleWorkflow({
                 ...job.params,
                 type: job.type,

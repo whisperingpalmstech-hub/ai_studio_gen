@@ -7,6 +7,9 @@ import { BadRequestError, InsufficientCreditsError, NotFoundError } from "../mid
 import { config } from "../config/index.js";
 import { v4 as uuidv4 } from "uuid";
 import { validateModelWorkflow } from "../services/model-registry.js";
+import fs from "fs";
+import path from "path";
+import { COMFYUI_INPUT_DIR } from "../config/comfy-paths.js";
 
 const router = Router();
 
@@ -27,12 +30,14 @@ const txt2imgSchema = z.object({
 });
 
 const img2imgSchema = txt2imgSchema.extend({
-    image_url: z.string().min(1),
+    image_url: z.string().optional(),
+    image_filename: z.string().min(1, "Image is required for this workflow"),
     denoising_strength: z.number().min(0).max(1).optional().default(0.75),
 });
 
 const inpaintSchema = img2imgSchema.extend({
-    mask_url: z.string().min(1),
+    mask_url: z.string().optional(),
+    mask_filename: z.string().optional(),
 });
 
 const t2vSchema = z.object({
@@ -45,10 +50,12 @@ const t2vSchema = z.object({
     video_frames: z.number().optional().default(81),
     fps: z.number().optional().default(16),
     seed: z.number().optional().default(-1),
+    model_id: z.string().optional(),
 });
 
 const i2vSchema = t2vSchema.extend({
-    image_url: z.string().min(1),
+    image_url: z.string().optional(),
+    image_filename: z.string().min(1, "Image is required for video animation"),
 });
 
 const workflowSchema = z.object({
@@ -125,6 +132,20 @@ router.post("/", async (req: AuthenticatedRequest, res: Response, next: NextFunc
                     throw new BadRequestError(`Model '${validatedParams.model_id}' is not compatible with workflow type '${type}'. Please select a valid model.`);
                 }
             }
+        }
+
+        // Enterprise Grade: Verify image file existence on disk
+        if (["img2img", "inpaint", "upscale", "i2v"].includes(type)) {
+            const filename = (validatedParams as any).image_filename;
+            if (!filename) {
+                throw new BadRequestError(`Image is required for job type '${type}'.`);
+            }
+            const fullPath = path.join(COMFYUI_INPUT_DIR, filename);
+            if (!fs.existsSync(fullPath)) {
+                console.error(`❌ Validation Failed: File not found at ${fullPath}`);
+                throw new BadRequestError(`Uploaded image '${filename}' not found on server. Please re-upload.`);
+            }
+            console.log(`✅ Job Validation: File verified at ${fullPath}`);
         }
 
         // Check tier limits
