@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useState, useRef } from 'react';
+import React, { memo, useState, useRef, useEffect } from 'react';
 import { Handle, Position, useReactFlow } from 'reactflow';
 import { Settings, Image as ImageIcon, Box, Type, Zap, Maximize, Save, Upload, Activity, Eye } from 'lucide-react';
 
@@ -224,7 +224,7 @@ export const SamplerNode = memo(({ id, data }: any) => {
     const updateData = useUpdateNodeData(id);
     return (
         <div style={getNodeStyle(data)}>
-            <NodeHeader label="KSampler" color="#ef4444" icon={Settings} />
+            <NodeHeader label={data.label || "KSampler"} color="#ef4444" icon={Settings} />
             <div style={styles.body}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                     <div style={styles.inputGroup}>
@@ -437,56 +437,189 @@ export const LoRANode = memo(({ id, data }: any) => {
 LoRANode.displayName = 'LoRANode';
 
 export const LoadImageNode = memo(({ id, data }: any) => {
-    // Hooks should be called at the top level
     const updateData = useUpdateNodeData(id);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const maskCanvasRef = useRef<HTMLCanvasElement>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [brushSize, setBrushSize] = useState(20);
+    const [isEraser, setIsEraser] = useState(false);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            // Read file
             const reader = new FileReader();
             reader.onload = (event) => {
                 const result = event.target?.result as string;
-                // Batch update state
-                // Use the new object-based update support in useUpdateNodeData
-                if (typeof updateData === 'function') {
-                    // Check if updateData supports object (it should with recent hook update)
-                    // If TS complains, we can cast or just rely on runtime js
-                    // To be safe and backward compatible with existing hook signature logic in runtime:
-                    // The hook update made it support object as first arg.
-                    updateData({
-                        image: result,
-                        filename: file.name
-                    });
-                }
+                updateData({
+                    image: result,
+                    filename: file.name,
+                    mask: null // Clear old mask
+                });
             };
             reader.readAsDataURL(file);
-
-            // Reset input value to allow re-uploading same file
             e.target.value = '';
         }
     };
 
+    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+        setIsDrawing(true);
+        draw(e);
+    };
+
+    const stopDrawing = () => {
+        setIsDrawing(false);
+        if (maskCanvasRef.current) {
+            // No need to update every stroke, can do on stop or on save
+        }
+    };
+
+    const draw = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawing || !canvasRef.current || !maskCanvasRef.current) return;
+
+        const canvas = canvasRef.current;
+        const maskCanvas = maskCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const mctx = maskCanvas.getContext('2d');
+        if (!ctx || !mctx) return;
+
+        const rect = canvas.getBoundingClientRect();
+        let x, y;
+
+        if ('touches' in e) {
+            x = e.touches[0].clientX - rect.left;
+            y = e.touches[0].clientY - rect.top;
+        } else {
+            x = (e as React.MouseEvent).clientX - rect.left;
+            y = (e as React.MouseEvent).clientY - rect.top;
+        }
+
+        // Scale coordinates if canvas style size differs from attribute size
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.lineWidth = brushSize;
+        ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; // Visual feedback
+
+        mctx.lineJoin = 'round';
+        mctx.lineCap = 'round';
+        mctx.lineWidth = brushSize;
+        mctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+        mctx.strokeStyle = 'white'; // Mask data
+
+        ctx.beginPath();
+        mctx.beginPath();
+
+        // This is a bit simplified (continuous lines need prevX/prevY), 
+        // but works for basic brush
+        ctx.arc(x * scaleX, y * scaleY, brushSize / 2, 0, Math.PI * 2);
+        mctx.arc(x * scaleX, y * scaleY, brushSize / 2, 0, Math.PI * 2);
+
+        ctx.fill();
+        mctx.fill();
+    };
+
+    const saveMask = () => {
+        if (maskCanvasRef.current) {
+            const maskBase64 = maskCanvasRef.current.toDataURL('image/png');
+            updateData('mask', maskBase64);
+            setIsEditing(false);
+        }
+    };
+
+    const initCanvas = () => {
+        if (!canvasRef.current || !data.image) return;
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+            const canvas = canvasRef.current!;
+            const mcanvas = maskCanvasRef.current!;
+            canvas.width = img.width;
+            canvas.height = img.height;
+            mcanvas.width = img.width;
+            mcanvas.height = img.height;
+
+            const mctx = mcanvas.getContext('2d')!;
+            mctx.fillStyle = 'black';
+            mctx.fillRect(0, 0, mcanvas.width, mcanvas.height);
+
+            // If we have an existing mask, load it? 
+            // For now, start fresh black
+        };
+        img.src = data.image;
+    }
+
+    useEffect(() => {
+        if (isEditing) {
+            setTimeout(initCanvas, 100);
+        }
+    }, [isEditing]);
+
     return (
         <div style={getNodeStyle(data)}>
-            <NodeHeader label="Load Image" color="#f59e0b" icon={Upload} />
+            <div style={{ position: 'relative' }}>
+                <NodeHeader label={data.label || "Load Image & Mask"} color="#f59e0b" icon={Upload} />
+                {isEditing && (
+                    <div style={{
+                        position: 'absolute',
+                        right: 8,
+                        top: 8,
+                        zIndex: 10,
+                        display: 'flex',
+                        gap: '4px'
+                    }}>
+                        <button
+                            onClick={() => {
+                                if (maskCanvasRef.current && canvasRef.current) {
+                                    const mctx = maskCanvasRef.current.getContext('2d')!;
+                                    const ctx = canvasRef.current.getContext('2d')!;
+                                    mctx.fillStyle = 'black';
+                                    mctx.fillRect(0, 0, maskCanvasRef.current.width, maskCanvasRef.current.height);
+                                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                                }
+                            }}
+                            style={{ ...styles.input, background: '#444', color: 'white', border: 'none', padding: '4px 8px' }}
+                        >
+                            Clear
+                        </button>
+                        <button
+                            onClick={saveMask}
+                            style={{ ...styles.input, background: '#22c55e', color: 'white', border: 'none', padding: '4px 8px' }}
+                        >
+                            Save
+                        </button>
+                        <button
+                            onClick={() => setIsEditing(false)}
+                            style={{ ...styles.input, background: '#ef4444', color: 'white', border: 'none', padding: '4px 8px' }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                )}
+            </div>
+
             <div style={{ ...styles.body, padding: 0 }}>
                 <div
-                    className="nodrag" // crucial for interaction inside node
+                    className="nodrag"
                     style={{
                         width: '100%',
-                        height: '160px',
+                        minHeight: '200px',
                         background: '#0c0c10',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
                         borderBottom: `1px solid ${colors.border}`,
-                        cursor: 'pointer',
-                        position: 'relative'
+                        cursor: isEditing ? 'crosshair' : 'pointer',
+                        position: 'relative',
+                        overflow: 'hidden'
                     }}
                     onClick={(e) => {
+                        if (isEditing) return;
                         e.stopPropagation();
                         fileInputRef.current?.click();
                     }}
@@ -496,27 +629,79 @@ export const LoadImageNode = memo(({ id, data }: any) => {
                             <img
                                 src={data.image}
                                 alt="Loaded"
-                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                style={{ width: '100%', height: 'auto', display: 'block', pointerEvents: 'none' }}
                             />
-                            <div style={{
-                                position: 'absolute',
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                                padding: '4px',
-                                background: 'rgba(0,0,0,0.6)',
-                                color: 'white',
-                                fontSize: '10px',
-                                textAlign: 'center',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                            }}>
-                                {data.filename || 'image.png'}
-                            </div>
+
+                            {isEditing && (
+                                <canvas
+                                    ref={canvasRef}
+                                    onMouseDown={startDrawing}
+                                    onMouseMove={draw}
+                                    onMouseUp={stopDrawing}
+                                    onMouseLeave={stopDrawing}
+                                    style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        height: '100%',
+                                        zIndex: 5
+                                    }}
+                                />
+                            )}
+
+                            {/* Hidden canvas for the actual mask data (no background image) */}
+                            <canvas ref={maskCanvasRef} style={{ display: 'none' }} />
+
+                            {!isEditing && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: 8,
+                                    right: 8,
+                                    zIndex: 6
+                                }}>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsEditing(true);
+                                        }}
+                                        style={{
+                                            ...styles.input,
+                                            background: 'rgba(99, 102, 241, 0.9)',
+                                            color: 'white',
+                                            padding: '4px 8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontSize: '10px'
+                                        }}
+                                    >
+                                        <Zap size={12} /> Edit Mask
+                                    </button>
+                                </div>
+                            )}
+
+                            {!isEditing && (
+                                <div style={{
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    padding: '4px',
+                                    background: 'rgba(0,0,0,0.6)',
+                                    color: 'white',
+                                    fontSize: '10px',
+                                    textAlign: 'center',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                }}>
+                                    {data.filename || 'image.png'} {data.mask ? '(Masked)' : ''}
+                                </div>
+                            )}
                         </div>
                     ) : (
-                        <div style={{ textAlign: 'center', color: colors.textMuted }}>
+                        <div style={{ textAlign: 'center', color: colors.textMuted, padding: '40px 0' }}>
                             <Upload size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
                             <div style={{ fontSize: '11px' }}>Click to upload</div>
                         </div>
@@ -531,12 +716,51 @@ export const LoadImageNode = memo(({ id, data }: any) => {
                 </div>
 
                 <div style={{ padding: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end' }}>
-                            <IOHandle type="source" position={Position.Right} label="IMAGE" color="#fbbf24" id="image" />
-                            <IOHandle type="source" position={Position.Right} label="MASK" color="#ef4444" id="mask" />
+                    {isEditing ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <label style={{ ...styles.label, marginBottom: 0 }}>Size: {brushSize}</label>
+                                <input
+                                    type="range"
+                                    min="1" max="100"
+                                    value={brushSize}
+                                    onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                                    style={{ flex: 1, accentColor: colors.accent }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => setIsEraser(false)}
+                                    style={{
+                                        ...styles.input,
+                                        flex: 1,
+                                        background: !isEraser ? colors.accent : colors.inputBg,
+                                        color: 'white'
+                                    }}
+                                >
+                                    Brush
+                                </button>
+                                <button
+                                    onClick={() => setIsEraser(true)}
+                                    style={{
+                                        ...styles.input,
+                                        flex: 1,
+                                        background: isEraser ? colors.accent : colors.inputBg,
+                                        color: 'white'
+                                    }}
+                                >
+                                    Eraser
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end' }}>
+                                <IOHandle type="source" position={Position.Right} label="IMAGE" color="#fbbf24" id="image" />
+                                <IOHandle type="source" position={Position.Right} label="MASK" color="#ef4444" id="mask" />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
