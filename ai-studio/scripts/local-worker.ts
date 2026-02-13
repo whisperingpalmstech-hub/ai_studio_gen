@@ -24,7 +24,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-console.log("🚀 Starting Local AI Worker...");
+console.log("🚀 Starting Local AI Worker (v2 - Fixed Schema)...");
 console.log(`📍 Supabase: ${SUPABASE_URL}`);
 console.log(`📍 ComfyUI: ${COMFYUI_URL}`);
 console.log(`📍 ComfyUI Input: ${COMFYUI_INPUT_DIR}`);
