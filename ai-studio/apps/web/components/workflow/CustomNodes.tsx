@@ -444,7 +444,8 @@ export const LoadImageNode = memo(({ id, data }: any) => {
     const [isEditing, setIsEditing] = useState(false);
     const [isDrawing, setIsDrawing] = useState(false);
     const [brushSize, setBrushSize] = useState(20);
-    const [isEraser, setIsEraser] = useState(false);
+    const [brushColor, setBrushColor] = useState<'white' | 'black'>('white');
+    const lastPos = useRef<{ x: number, y: number } | null>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -465,6 +466,7 @@ export const LoadImageNode = memo(({ id, data }: any) => {
 
     const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
         setIsDrawing(true);
+        lastPos.current = null; // Reset on start
         draw(e);
     };
 
@@ -502,25 +504,40 @@ export const LoadImageNode = memo(({ id, data }: any) => {
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         ctx.lineWidth = brushSize;
-        ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; // Visual feedback
+
+        ctx.globalCompositeOperation = brushColor === 'black' ? 'destination-out' : 'source-over';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
 
         mctx.lineJoin = 'round';
         mctx.lineCap = 'round';
         mctx.lineWidth = brushSize;
-        mctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
-        mctx.strokeStyle = 'white'; // Mask data
+        mctx.globalCompositeOperation = 'source-over';
+        mctx.strokeStyle = brushColor === 'white' ? 'white' : 'black';
+        mctx.fillStyle = brushColor === 'white' ? 'white' : 'black';
 
         ctx.beginPath();
         mctx.beginPath();
 
-        // This is a bit simplified (continuous lines need prevX/prevY), 
-        // but works for basic brush
-        ctx.arc(x * scaleX, y * scaleY, brushSize / 2, 0, Math.PI * 2);
-        mctx.arc(x * scaleX, y * scaleY, brushSize / 2, 0, Math.PI * 2);
+        const currentX = x * scaleX;
+        const currentY = y * scaleY;
+
+        if (lastPos.current) {
+            ctx.moveTo(lastPos.current.x, lastPos.current.y);
+            mctx.moveTo(lastPos.current.x, lastPos.current.y);
+            ctx.lineTo(currentX, currentY);
+            mctx.lineTo(currentX, currentY);
+        } else {
+            ctx.arc(currentX, currentY, brushSize / 2, 0, Math.PI * 2);
+            mctx.arc(currentX, currentY, brushSize / 2, 0, Math.PI * 2);
+        }
 
         ctx.fill();
         mctx.fill();
+        ctx.stroke();
+        mctx.stroke();
+
+        lastPos.current = { x: currentX, y: currentY };
     };
 
     const saveMask = () => {
@@ -730,26 +747,28 @@ export const LoadImageNode = memo(({ id, data }: any) => {
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button
-                                    onClick={() => setIsEraser(false)}
+                                    onClick={() => setBrushColor('white')}
                                     style={{
                                         ...styles.input,
                                         flex: 1,
-                                        background: !isEraser ? colors.accent : colors.inputBg,
-                                        color: 'white'
+                                        background: brushColor === 'white' ? colors.accent : colors.inputBg,
+                                        color: 'white',
+                                        fontSize: '11px'
                                     }}
                                 >
-                                    Brush
+                                    White (Mask)
                                 </button>
                                 <button
-                                    onClick={() => setIsEraser(true)}
+                                    onClick={() => setBrushColor('black')}
                                     style={{
                                         ...styles.input,
                                         flex: 1,
-                                        background: isEraser ? colors.accent : colors.inputBg,
-                                        color: 'white'
+                                        background: brushColor === 'black' ? colors.accent : colors.inputBg,
+                                        color: 'white',
+                                        fontSize: '11px'
                                     }}
                                 >
-                                    Eraser
+                                    Black (Keep)
                                 </button>
                             </div>
                         </div>
