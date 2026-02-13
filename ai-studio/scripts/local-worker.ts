@@ -733,18 +733,25 @@ async function processJob(job: any) {
         let outputs = null;
 
         while (!completed) {
-            const historyRes = await axios.get(`${COMFYUI_URL}/history/${promptId}`);
-            const history = historyRes.data[promptId];
+            try {
+                const historyRes = await axios.get(`${COMFYUI_URL}/history/${promptId}`);
+                const history = historyRes.data[promptId];
 
-            if (history && history.status && history.status.completed) {
-                completed = true;
-                outputs = history.outputs;
-                console.log("✅ ComfyUI task completed");
-                ws.close();
-            } else if (history && history.status && history.status.status_str === 'error') {
-                ws.close();
-                throw new Error("ComfyUI Execution Error: " + JSON.stringify(history.status.messages));
-            } else {
+                // console.log(`🔍 Polling history for ${promptId}... Status:`, history?.status);
+
+                if (history && history.status && history.status.completed) {
+                    completed = true;
+                    outputs = history.outputs;
+                    console.log("✅ ComfyUI task completed. Outputs:", JSON.stringify(Object.keys(outputs || {})));
+                    ws.close();
+                } else if (history && history.status && history.status.status_str === 'error') {
+                    ws.close();
+                    throw new Error("ComfyUI Execution Error: " + JSON.stringify(history.status.messages));
+                } else {
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            } catch (e) {
+                // console.log("⚠️ History poll error (retrying):", e.message);
                 await new Promise(r => setTimeout(r, 1000));
             }
         }
@@ -826,7 +833,27 @@ async function processJob(job: any) {
     }
 }
 
-// Polling interval
-setInterval(pollForJobs, 1000);
+// Reset stuck jobs on startup
+async function resetStuckJobs() {
+    console.log("🧹 Checking for stuck jobs...");
+    const { data: stuckJobs } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('status', 'processing');
 
-pollForJobs();
+    if (stuckJobs && stuckJobs.length > 0) {
+        console.log(`⚠️ Found ${stuckJobs.length} stuck jobs. Resetting to 'pending'...`);
+        for (const job of stuckJobs) {
+            await supabase.from('jobs').update({ status: 'pending', current_node: null, progress: 0 }).eq('id', job.id);
+        }
+        console.log("✅ All stuck jobs reset.");
+    } else {
+        console.log("✅ No stuck jobs found.");
+    }
+}
+
+// Polling interval
+resetStuckJobs().then(() => {
+    setInterval(pollForJobs, 1000);
+    pollForJobs();
+});
