@@ -1426,31 +1426,43 @@ function RecentGenerationsGrid({ refreshKey }: { refreshKey: number }) {
         fetchRecent();
     }, [refreshKey, localRefresh, activeTab]);
 
-    const handleDelete = async (e: React.MouseEvent, jobId: string) => {
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    const handleDelete = async (e: React.MouseEvent, assetId: string) => {
         e.stopPropagation();
-        if (!confirm("Are you sure you want to delete this generation?")) return;
+        if (!confirm("Permanently delete this generation?")) return;
+
+        // Optimistic UI Update
+        const previousRecent = [...recent];
+        setRecent(prev => prev.filter(item => item.id !== assetId));
+        setDeletingId(assetId);
 
         try {
             const supabase = getSupabaseClient();
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
-            const API_URL = "http://localhost:4000/api/v1";
-            const response = await fetch(`${API_URL}/jobs/${jobId}`, {
+            // Use the enterprise unified generations endpoint
+            const response = await fetch(`http://localhost:4000/api/v1/generations/${assetId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`
                 }
             });
 
-            if (response.ok) {
-                setLocalRefresh(prev => prev + 1);
-            } else {
-                alert("Failed to delete generation");
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Deletion failed");
             }
-        } catch (error) {
-            console.error("Delete error:", error);
-            alert("Error deleting generation");
+
+            console.log(`[RecentGrid] Successfully deleted asset ${assetId}`);
+        } catch (error: any) {
+            console.error("Delete failed:", error);
+            // Rollback optimistic update
+            setRecent(previousRecent);
+            alert(`Delete failed: ${error.message}`);
+        } finally {
+            setDeletingId(assetId === deletingId ? null : deletingId);
         }
     };
 
@@ -1600,30 +1612,40 @@ function RecentGenerationsGrid({ refreshKey }: { refreshKey: number }) {
                             >
                                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                     <button
-                                        onClick={(e) => handleDelete(e, gen.job_id)}
+                                        onClick={(e) => handleDelete(e, gen.id)}
+                                        disabled={deletingId === gen.id}
                                         style={{
                                             background: 'rgba(239, 68, 68, 0.1)',
                                             border: '1px solid rgba(239, 68, 68, 0.2)',
                                             color: '#ef4444',
                                             padding: '0.4rem',
                                             borderRadius: '0.5rem',
-                                            cursor: 'pointer',
+                                            cursor: deletingId === gen.id ? 'not-allowed' : 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            transition: 'all 0.2s'
+                                            transition: 'all 0.2s',
+                                            opacity: deletingId === gen.id ? 1 : 0.8
                                         }}
                                         onMouseEnter={(e) => {
-                                            e.currentTarget.style.background = '#ef4444';
-                                            e.currentTarget.style.color = 'white';
+                                            if (deletingId !== gen.id) {
+                                                e.currentTarget.style.background = '#ef4444';
+                                                e.currentTarget.style.color = 'white';
+                                            }
                                         }}
                                         onMouseLeave={(e) => {
-                                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                                            e.currentTarget.style.color = '#ef4444';
+                                            if (deletingId !== gen.id) {
+                                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                                e.currentTarget.style.color = '#ef4444';
+                                            }
                                         }}
                                         title="Delete Generation"
                                     >
-                                        <Trash2 style={{ width: '0.9rem', height: '0.9rem' }} />
+                                        {deletingId === gen.id ? (
+                                            <Loader2 style={{ width: '0.9rem', height: '0.9rem' }} className="animate-spin" />
+                                        ) : (
+                                            <Trash2 style={{ width: '0.9rem', height: '0.9rem' }} />
+                                        )}
                                     </button>
                                 </div>
                                 <p style={{

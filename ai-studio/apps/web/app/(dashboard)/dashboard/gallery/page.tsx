@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { Download, Trash2, Calendar, Sparkles, Search, Filter } from "lucide-react";
+import { Download, Trash2, Calendar, Sparkles, Search, Filter, Loader2, AlertTriangle, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Generation {
     id: string;
@@ -22,6 +23,9 @@ export default function GalleryPage() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedImage, setSelectedImage] = useState<Generation | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    const { toast } = useToast();
 
     useEffect(() => {
         fetchGenerations();
@@ -47,18 +51,26 @@ export default function GalleryPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this generation and its files?")) return;
+        // Optimistic Update: Store previous state for rollback
+        const previousGenerations = [...generations];
+        setConfirmDeleteId(null);
+        setDeletingId(id);
 
         try {
             const supabase = getSupabaseClient();
             const { data: { session } } = await supabase.auth.getSession();
 
             if (!session) {
-                alert("Please log in to delete assets.");
+                toast({
+                    title: "Authentication required",
+                    description: "Please log in to manage your gallery.",
+                    variant: "destructive",
+                });
                 return;
             }
 
-            const response = await fetch(`http://localhost:4000/api/v1/assets/${id}`, {
+            // Enterprise Grade API Call - Unified Generations Endpoint
+            const response = await fetch(`http://localhost:4000/api/v1/generations/${id}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`
@@ -66,15 +78,30 @@ export default function GalleryPage() {
             });
 
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.message || "Failed to delete asset");
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Failed to remove generation from server.");
             }
 
+            // Successfully deleted
             setGenerations(prev => prev.filter(g => g.id !== id));
-            setSelectedImage(null);
+            if (selectedImage?.id === id) setSelectedImage(null);
+
+            toast({
+                title: "Generation deleted",
+                description: "Your creation and its data have been permanently removed.",
+            });
+
         } catch (error: any) {
-            console.error("Delete error:", error);
-            alert(`Delete failed: ${error.message}`);
+            console.error("Critical Delete Error:", error);
+            // Rollback optimistic update
+            setGenerations(previousGenerations);
+            toast({
+                title: "Delete failed",
+                description: error.message || "An unexpected error occurred. Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -245,8 +272,9 @@ export default function GalleryPage() {
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        handleDelete(gen.id);
+                                        setConfirmDeleteId(gen.id);
                                     }}
+                                    disabled={deletingId === gen.id}
                                     style={{
                                         position: 'absolute',
                                         top: '0.5rem',
@@ -256,13 +284,20 @@ export default function GalleryPage() {
                                         backgroundColor: 'rgba(0, 0, 0, 0.6)',
                                         color: '#ef4444',
                                         border: 'none',
-                                        cursor: 'pointer',
-                                        opacity: 0,
+                                        cursor: deletingId === gen.id ? 'not-allowed' : 'pointer',
+                                        opacity: deletingId === gen.id ? 1 : 0,
                                         transition: 'opacity 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
                                     }}
                                     className="delete-btn"
                                 >
-                                    <Trash2 style={{ width: '1rem', height: '1rem' }} />
+                                    {deletingId === gen.id ? (
+                                        <Loader2 style={{ width: '1rem', height: '1rem' }} className="animate-spin" />
+                                    ) : (
+                                        <Trash2 style={{ width: '1rem', height: '1rem' }} />
+                                    )}
                                 </button>
                                 <p style={{
                                     fontSize: '0.875rem',
@@ -421,7 +456,8 @@ export default function GalleryPage() {
                                     Download
                                 </button>
                                 <button
-                                    onClick={() => handleDelete(selectedImage.id)}
+                                    onClick={() => setConfirmDeleteId(selectedImage.id)}
+                                    disabled={deletingId === selectedImage.id}
                                     style={{
                                         flex: 1,
                                         display: 'flex',
@@ -431,14 +467,19 @@ export default function GalleryPage() {
                                         padding: '0.75rem',
                                         borderRadius: '0.5rem',
                                         border: '1px solid rgba(255, 255, 255, 0.1)',
-                                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                        backgroundColor: deletingId === selectedImage.id ? 'rgba(239, 68, 68, 0.05)' : 'rgba(239, 68, 68, 0.1)',
                                         color: '#ef4444',
-                                        cursor: 'pointer',
-                                        fontWeight: 500
+                                        cursor: deletingId === selectedImage.id ? 'not-allowed' : 'pointer',
+                                        fontWeight: 500,
+                                        opacity: deletingId === selectedImage.id ? 0.7 : 1
                                     }}
                                 >
-                                    <Trash2 style={{ width: '1rem', height: '1rem' }} />
-                                    Delete
+                                    {deletingId === selectedImage.id ? (
+                                        <Loader2 style={{ width: '1rem', height: '1rem' }} className="animate-spin" />
+                                    ) : (
+                                        <Trash2 style={{ width: '1rem', height: '1rem' }} />
+                                    )}
+                                    {deletingId === selectedImage.id ? "Deleting..." : "Delete"}
                                 </button>
                             </div>
                         </div>
@@ -446,6 +487,77 @@ export default function GalleryPage() {
                 </div>
             )
             }
+            {/* Confirmation Modal */}
+            {confirmDeleteId && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    backdropFilter: 'blur(4px)',
+                    zIndex: 100,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '1rem'
+                }}>
+                    <div style={{
+                        maxWidth: '28rem',
+                        width: '100%',
+                        backgroundColor: '#1a1a2e',
+                        borderRadius: '1rem',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        padding: '2rem',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', color: '#ef4444' }}>
+                            <div style={{ padding: '0.75rem', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.1)' }}>
+                                <AlertTriangle size={24} />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white' }}>Confirm Deletion</h3>
+                        </div>
+
+                        <p style={{ color: '#9ca3af', marginBottom: '2rem', lineHeight: 1.6 }}>
+                            Are you sure you want to permanently delete this generation? This action will remove the image/video from storage and cannot be undone.
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                style={{
+                                    flex: 1,
+                                    padding: '0.75rem',
+                                    borderRadius: '0.5rem',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                    backgroundColor: 'transparent',
+                                    color: 'white',
+                                    fontWeight: 500,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+                                style={{
+                                    flex: 1,
+                                    padding: '0.75rem',
+                                    borderRadius: '0.5rem',
+                                    border: 'none',
+                                    backgroundColor: '#ef4444',
+                                    color: 'white',
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Delete Permanently
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

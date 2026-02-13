@@ -1201,24 +1201,41 @@ function RecentVideosGrid({ refreshKey }: { refreshKey: number }) {
         fetchVideos();
     }, [refreshKey, localRefresh]);
 
-    const handleDelete = async (e: React.MouseEvent, jobId: string) => {
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    const handleDelete = async (e: React.MouseEvent, assetId: string) => {
         e.stopPropagation();
-        if (!confirm("Remove this production from archives?")) return;
+        if (!confirm("Permanently archive this production?")) return;
+
+        // Optimistic UI Update
+        const previousVideos = [...videos];
+        setVideos(prev => prev.filter(v => v.id !== assetId));
+        setDeletingId(assetId);
 
         try {
             const supabase = getSupabaseClient();
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
-            const API_URL = "http://localhost:4000/api/v1";
-            const response = await fetch(`${API_URL}/jobs/${jobId}`, {
+            // Enterprise Grade API Call
+            const response = await fetch(`http://localhost:4000/api/v1/generations/${assetId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
 
-            if (response.ok) setLocalRefresh(prev => prev + 1);
-        } catch (error) {
-            console.error(error);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Archive deletion failed");
+            }
+
+            console.log(`[RecentVideos] Successfully deleted ${assetId}`);
+        } catch (error: any) {
+            console.error("Archive Error:", error);
+            // Rollback
+            setVideos(previousVideos);
+            alert(`Failed to delete: ${error.message}`);
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -1282,14 +1299,32 @@ function RecentVideosGrid({ refreshKey }: { refreshKey: number }) {
                             {vid.prompt}
                         </p>
                         <button
-                            onClick={(e) => handleDelete(e, vid.job_id)}
-                            style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '0.4rem', borderRadius: '0.4rem', cursor: 'pointer' }}
+                            onClick={(e) => handleDelete(e, vid.id)}
+                            disabled={deletingId === vid.id}
+                            style={{
+                                background: deletingId === vid.id ? 'rgba(239, 68, 68, 0.05)' : 'rgba(239, 68, 68, 0.1)',
+                                border: 'none',
+                                color: '#ef4444',
+                                padding: '0.4rem',
+                                borderRadius: '0.4rem',
+                                cursor: deletingId === vid.id ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minWidth: '32px',
+                                minHeight: '32px'
+                            }}
                         >
-                            <Trash2 size={14} />
+                            {deletingId === vid.id ? (
+                                <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                                <Trash2 size={14} />
+                            )}
                         </button>
                     </div>
                 </div>
             ))}
         </div>
     );
+
 }
