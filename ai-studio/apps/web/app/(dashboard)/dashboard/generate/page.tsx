@@ -405,12 +405,9 @@ export default function GeneratePage() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Not authenticated");
 
-            // Direct upload to the Express API
-            const response = await fetch("http://localhost:4000/api/v1/uploads/image", {
+            // Upload to the internal Next.js API (Storage backed)
+            const response = await fetch("/api/uploads/image", {
                 method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${session.access_token}`
-                },
                 body: formData
             });
 
@@ -1443,11 +1440,8 @@ function RecentGenerationsGrid({ refreshKey }: { refreshKey: number }) {
             if (!session) return;
 
             // Use the enterprise unified generations endpoint
-            const response = await fetch(`http://localhost:4000/api/v1/generations/${assetId}`, {
+            const response = await fetch(`/api/generations/${assetId}`, {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`
-                }
             });
 
             if (!response.ok) {

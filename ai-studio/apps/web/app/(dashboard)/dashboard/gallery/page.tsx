@@ -69,12 +69,9 @@ export default function GalleryPage() {
                 return;
             }
 
-            // Enterprise Grade API Call - Unified Generations Endpoint
-            const response = await fetch(`http://localhost:4000/api/v1/generations/${id}`, {
+            // Enterprise Grade API Call - Internal Next.js API Proxy
+            const response = await fetch(`/api/generations/${id}`, {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`
-                }
             });
 
             if (!response.ok) {

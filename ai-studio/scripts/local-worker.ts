@@ -392,7 +392,19 @@ async function processJob(job: any) {
 
             const imagePath = path.join(COMFYUI_INPUT_DIR, imageFilename);
             if (!fs.existsSync(imagePath)) {
-                throw new Error(`Enterprise File System Error: Required input file '${imageFilename}' missing from storage (${imagePath}).`);
+                console.log(`☁️ File ${imageFilename} missing locally. Checking Supabase Storage...`);
+                // Try to find it in the user's inputs folder
+                const storagePath = `inputs/${job.user_id}/${imageFilename}`;
+                const { data, error } = await supabase.storage.from('assets').download(storagePath);
+
+                if (error || !data) {
+                    console.error(`❌ Cloud Retrieval Failed for ${storagePath}:`, error?.message);
+                    throw new Error(`Enterprise File System Error: Required input file '${imageFilename}' missing from local storage and cloud storage.`);
+                }
+
+                const buffer = Buffer.from(await data.arrayBuffer());
+                fs.writeFileSync(imagePath, buffer);
+                console.log(`✅ Successfully synced ${imageFilename} from cloud to local storage.`);
             }
             console.log(`✅ Input Verified: ${imageFilename} exists and is ready.`);
         }
@@ -409,7 +421,17 @@ async function processJob(job: any) {
             }
             const maskPath = path.join(COMFYUI_INPUT_DIR, maskFilename);
             if (!fs.existsSync(maskPath)) {
-                throw new Error(`Enterprise File System Error: Required mask file '${maskFilename}' missing from storage.`);
+                console.log(`☁️ Mask ${maskFilename} missing locally. Checking Supabase Storage...`);
+                const storagePath = `inputs/${job.user_id}/${maskFilename}`;
+                const { data, error } = await supabase.storage.from('assets').download(storagePath);
+
+                if (error || !data) {
+                    throw new Error(`Enterprise File System Error: Required mask file '${maskFilename}' missing from local and cloud storage.`);
+                }
+
+                const buffer = Buffer.from(await data.arrayBuffer());
+                fs.writeFileSync(maskPath, buffer);
+                console.log(`✅ Successfully synced mask ${maskFilename} from cloud.`);
             }
             console.log(`✅ Mask Verified: ${maskFilename} exists.`);
         }

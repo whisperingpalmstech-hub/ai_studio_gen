@@ -1218,9 +1218,8 @@ function RecentVideosGrid({ refreshKey }: { refreshKey: number }) {
             if (!session) return;
 
             // Enterprise Grade API Call
-            const response = await fetch(`http://localhost:4000/api/v1/generations/${assetId}`, {
+            const response = await fetch(`/api/generations/${assetId}`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
 
             if (!response.ok) {
