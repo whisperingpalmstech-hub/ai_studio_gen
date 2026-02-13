@@ -23,6 +23,25 @@ console.log("🚀 Starting Local AI Worker...");
 console.log(`📍 Supabase: ${SUPABASE_URL}`);
 console.log(`📍 ComfyUI: ${COMFYUI_URL}`);
 
+async function uploadImageToComfy(dataUrl: string, filename: string) {
+    try {
+        const base64Data = dataUrl.split(',')[1];
+        if (!base64Data) return;
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        const form = new FormData();
+        form.append('image', buffer, { filename, contentType: 'image/png' });
+        form.append('overwrite', 'true');
+
+        await axios.post(`${COMFYUI_URL}/upload/image`, form, {
+            headers: form.getHeaders()
+        });
+        console.log(`📤 Uploaded image to ComfyUI: ${filename}`);
+    } catch (err: any) {
+        console.warn(`⚠️ Failed to upload image: ${err.message}`);
+    }
+}
+
 // Import the workflow generator logic (Simplified for the script)
 const generateSimpleWorkflow = (params: any) => {
     const type = params.type || "txt2img";
@@ -44,6 +63,7 @@ const generateSimpleWorkflow = (params: any) => {
     };
 
     const workflow: Record<string, any> = {};
+    let denoise = 1.0;
 
     // Standard Image Generation
     if (type === "txt2img" || type === "img2img" || type === "inpaint" || type === "upscale") {
@@ -89,7 +109,7 @@ const generateSimpleWorkflow = (params: any) => {
         };
 
         let latentNodeId = ID_OLD.LATENT_EMPTY;
-        let denoise = 1.0;
+        denoise = 1.0;
 
         if (type === "txt2img") {
             workflow[ID_OLD.LATENT_EMPTY] = {
@@ -101,9 +121,53 @@ const generateSimpleWorkflow = (params: any) => {
                 }
             };
         } else if (type === "img2img" || type === "upscale") {
-            // Standard img2img logic
-            denoise = params.denoising_strength ?? 0.75;
-            // ... (rest of simple img2img if needed, keeping it compact for worker)
+            const sourceImage = params.image_filename || "input.png";
+            workflow[ID_OLD.LOAD_IMAGE] = {
+                class_type: "LoadImage",
+                inputs: { image: sourceImage, upload: "image" }
+            };
+
+            let pixelNodeId = ID_OLD.LOAD_IMAGE;
+            denoise = params.denoising_strength ?? (type === "upscale" ? 0.35 : 0.75);
+
+            if (type === "upscale") {
+                const UPSCALE_NODE = "15";
+                workflow[UPSCALE_NODE] = {
+                    class_type: "ImageScaleBy",
+                    inputs: {
+                        image: [ID_OLD.LOAD_IMAGE, 0],
+                        upscale_method: "area",
+                        scale_by: 2.0
+                    }
+                };
+                pixelNodeId = UPSCALE_NODE;
+            }
+
+            workflow[ID_OLD.VAE_ENCODE] = {
+                class_type: "VAEEncode",
+                inputs: { pixels: [pixelNodeId, 0], vae: [ID_OLD.CHECKPOINT, 2] }
+            };
+            latentNodeId = ID_OLD.VAE_ENCODE;
+        } else if (type === "inpaint") {
+            workflow[ID_OLD.LOAD_IMAGE] = {
+                class_type: "LoadImage",
+                inputs: { image: params.image_filename || "input.png", upload: "image" }
+            };
+            workflow[ID_OLD.LOAD_MASK] = {
+                class_type: "LoadImage",
+                inputs: { image: params.mask_filename || "mask.png", upload: "image" }
+            };
+            workflow[ID_OLD.VAE_ENCODE_INPAINT] = {
+                class_type: "VAEEncodeForInpaint",
+                inputs: {
+                    pixels: [ID_OLD.LOAD_IMAGE, 0],
+                    vae: [ID_OLD.CHECKPOINT, 2],
+                    mask: [ID_OLD.LOAD_MASK, 1],
+                    grow_mask_by: 6
+                }
+            };
+            latentNodeId = ID_OLD.VAE_ENCODE_INPAINT;
+            denoise = params.denoising_strength ?? 0.6;
         }
 
         const samplerMap: Record<string, string> = {
@@ -212,9 +276,9 @@ const generateSimpleWorkflow = (params: any) => {
                 positive: type === "t2v" ? [ID.PROMPT_POS, 0] : [ID.WAN_I2V, 0],
                 negative: type === "t2v" ? [ID.PROMPT_NEG, 0] : [ID.WAN_I2V, 1],
                 latent_image: type === "t2v" ? [ID.LATENT, 0] : [ID.WAN_I2V, 2],
-                seed: params.seed && params.seed !== -1 ? params.seed : Math.floor(Math.random() * 10000000),
-                steps: params.steps || 30,
-                cfg: params.cfg_scale || 6.0,
+                seed: params.seed && params.seed !== -1 ? Number(params.seed) : Math.floor(Math.random() * 10000000),
+                steps: Number(params.steps) || 30,
+                cfg: Number(params.cfg_scale) || 6.0,
                 sampler_name: "uni_pc_bh2",
                 scheduler: "simple",
                 denoise: 1.0
@@ -283,15 +347,23 @@ async function processJob(job: any) {
         await supabase.from('jobs').update({ status: 'processing', started_at: new Date().toISOString() }).eq('id', job.id);
 
         // 2. Prepare Workflow
-        // In a real implementation, we should import 'generateSimpleWorkflow' from the actual utils
-        // For now, let's assume the params might be enough or we use a helper.
+        let imageFilename = "";
+        // If image is a data URL, upload it first
+        if (job.params.image && typeof job.params.image === 'string' && job.params.image.startsWith("data:image")) {
+            imageFilename = `input_${job.id}.png`;
+            await uploadImageToComfy(job.params.image, imageFilename);
+        } else if (job.params.image_filename) {
+            imageFilename = job.params.image_filename;
+        }
+
         let workflow = job.params.workflow;
         if (!workflow) {
-            // If no workflow is provided (txt2img/img2img), generate one
-            // This would normally use the generator from apps/api/src/utils/simple-workflow-generator.ts
-            // For now, we'll try to reach out to that logic if we can, or use the placeholder.
             console.log("Generating simple workflow for type:", job.type);
-            workflow = generateSimpleWorkflow({ ...job.params, type: job.type });
+            workflow = generateSimpleWorkflow({
+                ...job.params,
+                type: job.type,
+                image_filename: imageFilename
+            });
         }
 
         // 3. Send to ComfyUI
