@@ -843,7 +843,7 @@ async function processJob(job: any) {
             status: 'completed',
             progress: 100,
             outputs: assetUrls,
-            results: nodeResults,
+            // results: nodeResults, // Schema doesn't have results column
             completed_at: new Date().toISOString()
         }).eq('id', job.id);
 
