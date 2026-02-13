@@ -6,6 +6,7 @@ import { supabaseAdmin } from "../services/supabase.js";
 import { BadRequestError, InsufficientCreditsError, NotFoundError } from "../middleware/error.js";
 import { config } from "../config/index.js";
 import { v4 as uuidv4 } from "uuid";
+import { validateModelWorkflow } from "../services/model-registry.js";
 
 const router = Router();
 
@@ -100,6 +101,30 @@ router.post("/", async (req: AuthenticatedRequest, res: Response, next: NextFunc
                 );
             }
             throw error;
+        }
+
+        // Enterprise Grade: Validate model-workflow compatibility (FULLY DYNAMIC)
+        if (validatedParams.model_id) {
+            // 1. First check if it's in the DB for dynamic metadata
+            const { data: dbModel } = await (supabaseAdmin as any)
+                .from("models")
+                .select("metadata")
+                .eq("file_path", validatedParams.model_id)
+                .maybeSingle();
+
+            if (dbModel && (dbModel as any).metadata) {
+                const { validateCompatibilityFromMetadata } = await import("../services/model-registry.js");
+                const isCompatible = validateCompatibilityFromMetadata((dbModel as any).metadata, type);
+                if (!isCompatible) {
+                    throw new BadRequestError(`Model '${validatedParams.model_id}' is not compatible with workflow type '${type}' (Based on DB Metadata).`);
+                }
+            } else {
+                // 2. Fallback to hardcoded registry for system models or if DB has no metadata
+                const isCompatible = validateModelWorkflow(validatedParams.model_id, type);
+                if (!isCompatible) {
+                    throw new BadRequestError(`Model '${validatedParams.model_id}' is not compatible with workflow type '${type}'. Please select a valid model.`);
+                }
+            }
         }
 
         // Check tier limits

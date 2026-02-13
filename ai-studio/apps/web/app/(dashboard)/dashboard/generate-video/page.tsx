@@ -265,6 +265,14 @@ export default function GenerateVideoPage() {
     useEffect(() => {
         const fetchModels = async () => {
             const supabase = getSupabaseClient();
+
+            // Map frontend mode to registry type
+            const typeMap: any = {
+                "t2v": "text_to_video",
+                "i2v": "image_to_video"
+            };
+            const currentWorkflow = typeMap[mode];
+
             const { data } = await supabase
                 .from("models")
                 .select("*")
@@ -272,18 +280,31 @@ export default function GenerateVideoPage() {
                 .order("is_system", { ascending: false });
 
             if (data) {
-                const wanModels = (data as any[]).filter(m => m.name.toLowerCase().includes('wan') || m.file_path.toLowerCase().includes('wan'));
-                setAvailableModels(wanModels);
+                // Filter by metadata for Enterprise compatibility
+                const filtered = (data as any[]).filter(m => {
+                    const meta = m.metadata || {};
+                    const compatible = meta.compatibleWorkflows || [];
 
-                // Set default Wan model
-                const defaultModel = mode === "t2v"
-                    ? wanModels.find(m => m.name.includes("T2V"))
-                    : wanModels.find(m => m.name.includes("I2V"));
-                setSelectedModel(defaultModel || wanModels[0]);
+                    // Fallback for older data: search for "wan" if no metadata exists
+                    if (compatible.length === 0) {
+                        return m.name.toLowerCase().includes('wan') || m.file_path.toLowerCase().includes('wan');
+                    }
+
+                    return compatible.includes(currentWorkflow);
+                });
+
+                setAvailableModels(filtered);
+
+                // Set default Wan model based on mode
+                const defaultModel = filtered.find(m =>
+                    (mode === "t2v" && (m.name.includes("T2V") || m.metadata?.compatibleWorkflows?.includes("text_to_video"))) ||
+                    (mode === "i2v" && (m.name.includes("I2V") || m.metadata?.compatibleWorkflows?.includes("image_to_video")))
+                );
+                setSelectedModel(defaultModel || filtered[0]);
             }
         };
-        fetchModels();
-    }, [mode]);
+        if (!isGenerating) fetchModels();
+    }, [mode, isGenerating]);
 
     // Fetch user credits on page load
     useEffect(() => {
@@ -572,7 +593,12 @@ export default function GenerateVideoPage() {
                                 const model = availableModels.find(m => m.id === e.target.value);
                                 setSelectedModel(model);
                             }}
-                            style={inputStyle}
+                            disabled={isGenerating}
+                            style={{
+                                ...inputStyle,
+                                opacity: isGenerating ? 0.5 : 1,
+                                cursor: isGenerating ? 'not-allowed' : 'pointer'
+                            }}
                         >
                             {availableModels.map((m) => (
                                 <option key={m.id} value={m.id} style={{ backgroundColor: '#1e1b4b' }}>

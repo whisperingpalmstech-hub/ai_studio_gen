@@ -4,6 +4,8 @@ import axios from 'axios';
 import FormData from 'form-data';
 import dotenv from 'dotenv';
 import { WebSocket } from 'ws';
+import fs from 'fs';
+import path from 'path';
 
 // Load environment variables
 dotenv.config({ path: 'apps/api/.env' });
@@ -11,6 +13,9 @@ dotenv.config({ path: 'apps/api/.env' });
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const COMFYUI_URL = process.env.COMFYUI_URL || 'http://127.0.0.1:8188';
+
+// Enterprise Grade: Absolute path to ComfyUI input folder
+const COMFYUI_INPUT_DIR = '/home/sujeetnew/Downloads/Ai-Studio/Ai-Studio-/ComfyUI/input';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("❌ Missing Supabase configuration. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.");
@@ -22,6 +27,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 console.log("🚀 Starting Local AI Worker...");
 console.log(`📍 Supabase: ${SUPABASE_URL}`);
 console.log(`📍 ComfyUI: ${COMFYUI_URL}`);
+console.log(`📍 ComfyUI Input: ${COMFYUI_INPUT_DIR}`);
 
 async function uploadImageToComfy(dataUrl: string, filename: string) {
     try {
@@ -29,6 +35,12 @@ async function uploadImageToComfy(dataUrl: string, filename: string) {
         if (!base64Data) return;
         const buffer = Buffer.from(base64Data, 'base64');
 
+        // 1. Save to ComfyUI input directory immediately (FOR ENTERPRISE RELIABILITY)
+        const fullPath = path.join(COMFYUI_INPUT_DIR, filename);
+        fs.writeFileSync(fullPath, buffer);
+        console.log(`💾 Saved file to persistent storage: ${fullPath} (${buffer.length} bytes)`);
+
+        // 2. Also upload via API (Double-safe)
         const form = new FormData();
         form.append('image', buffer, { filename, contentType: 'image/png' });
         form.append('overwrite', 'true');
@@ -36,9 +48,15 @@ async function uploadImageToComfy(dataUrl: string, filename: string) {
         await axios.post(`${COMFYUI_URL}/upload/image`, form, {
             headers: form.getHeaders()
         });
-        console.log(`📤 Uploaded image to ComfyUI: ${filename}`);
+        console.log(`📤 Notified ComfyUI API of upload: ${filename}`);
+
+        // 3. Verify existence before proceeding
+        if (!fs.existsSync(fullPath)) {
+            throw new Error(`CRITICAL: Image file ${filename} not found in ComfyUI input folder after save attempt`);
+        }
     } catch (err: any) {
-        console.warn(`⚠️ Failed to upload image: ${err.message}`);
+        console.error(`❌ FAILED to prepare image: ${err.message}`);
+        throw err; // Propagate to job failure
     }
 }
 
@@ -242,7 +260,7 @@ const generateSimpleWorkflow = (params: any) => {
             // i2v
             workflow[ID.LOAD_IMAGE] = {
                 class_type: "LoadImage",
-                inputs: { image: params.image_url || params.image || "input.png", upload: "image" }
+                inputs: { image: params.image_filename || "input.png", upload: "image" }
             };
 
             workflow[ID.CLIP_VISION] = {
@@ -355,10 +373,29 @@ async function processJob(job: any) {
         let imageFilename = "";
         // If image is a data URL, upload it first
         if (job.params.image && typeof job.params.image === 'string' && job.params.image.startsWith("data:image")) {
-            imageFilename = `input_${job.id}.png`;
+            // Enterprise: Use unique jobId for the filename to prevent collision and verify persistence
+            imageFilename = `${job.id}.png`;
             await uploadImageToComfy(job.params.image, imageFilename);
         } else if (job.params.image_filename) {
             imageFilename = job.params.image_filename;
+        }
+
+        let maskFilename = "";
+        if (job.params.mask && typeof job.params.mask === 'string' && job.params.mask.startsWith("data:image")) {
+            maskFilename = `mask_${job.id}.png`;
+            await uploadImageToComfy(job.params.mask, maskFilename);
+        } else if (job.params.mask_filename) {
+            maskFilename = job.params.mask_filename;
+        }
+
+        // Verify file existence for img2img/i2v
+        if (["img2img", "inpaint", "upscale", "i2v"].includes(job.type)) {
+            const fullPath = path.join(COMFYUI_INPUT_DIR, imageFilename || "none");
+            if (!fs.existsSync(fullPath)) {
+                console.error(`❌ File not found: ${fullPath}`);
+                throw new Error(`Enterprise Validation Error: Input image ${imageFilename} was not found on disk at ${fullPath}. Cannot proceed with ${job.type} job.`);
+            }
+            console.log(`✅ Input verified: ${fullPath} (${fs.statSync(fullPath).size} bytes)`);
         }
 
         let workflow = job.params.workflow;
@@ -367,7 +404,9 @@ async function processJob(job: any) {
             workflow = generateSimpleWorkflow({
                 ...job.params,
                 type: job.type,
-                image_filename: imageFilename
+                image_filename: imageFilename,
+                mask_filename: maskFilename,
+                model_id: job.params.model_id
             });
         }
 

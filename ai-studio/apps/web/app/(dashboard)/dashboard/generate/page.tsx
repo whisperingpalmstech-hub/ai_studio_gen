@@ -317,10 +317,20 @@ export default function GeneratePage() {
     const [availableModels, setAvailableModels] = useState<any[]>([]);
     const [selectedModel, setSelectedModel] = useState<any>(null);
 
-    // Fetch available models
+    // Fetch available models with Enterprise filtering
     useEffect(() => {
         const fetchModels = async () => {
             const supabase = getSupabaseClient();
+
+            // Map frontend mode to registry type
+            const typeMap: any = {
+                "txt2img": "text_to_image",
+                "img2img": "image_to_image",
+                "inpaint": "inpaint",
+                "upscale": "upscale"
+            };
+            const currentWorkflow = typeMap[mode];
+
             const { data } = await supabase
                 .from("models")
                 .select("*")
@@ -328,23 +338,23 @@ export default function GeneratePage() {
                 .order("is_system", { ascending: false });
 
             if (data) {
-                setAvailableModels(data);
-                const sdxl = (data as any[]).find(m => m.base_model === 'sdxl');
-                const sd15 = (data as any[]).find(m => m.base_model === 'sd15');
-                setSelectedModel(sdxl || sd15 || data[0]);
+                // Enterprise Grade: Filter models by compatibility stored in metadata
+                const filtered = (data as any[]).filter(m => {
+                    const meta = m.metadata || {};
+                    const compatible = meta.compatibleWorkflows || ["text_to_image", "image_to_image"];
+                    return compatible.includes(currentWorkflow);
+                });
+
+                setAvailableModels(filtered);
+
+                // Select best default for the mode
+                const sdxl = filtered.find(m => m.base_model === 'sdxl' || m.metadata?.architecture === 'sdxl');
+                const sd15 = filtered.find(m => m.base_model === 'sd15' || m.metadata?.architecture === 'sd15');
+                setSelectedModel(sdxl || sd15 || filtered[0]);
             }
         };
-        fetchModels();
-    }, []);
-
-    // Handle mode changes
-    useEffect(() => {
-        if (mode === "txt2img" || mode === "img2img") {
-            const sdxl = availableModels.find(m => m.base_model === 'sdxl');
-            const sd15 = availableModels.find(m => m.base_model === 'sd15');
-            setSelectedModel(sdxl || sd15 || availableModels[0]);
-        }
-    }, [mode, availableModels]);
+        if (!isGenerating) fetchModels();
+    }, [mode, isGenerating]);
 
     // Fetch user credits and ID
     useEffect(() => {
@@ -734,20 +744,23 @@ export default function GeneratePage() {
                                     const model = availableModels.find(m => m.id === e.target.value);
                                     setSelectedModel(model);
                                     // Auto-adjust resolution for SDXL
-                                    if (model?.base_model === 'sdxl') {
+                                    if (model?.base_model === 'sdxl' || model?.metadata?.architecture === 'sdxl') {
                                         const square = ASPECT_RATIOS.find(a => a.label === "1:1");
                                         if (square) setSelectedAspect(square);
                                     }
                                 }}
-                                style={inputStyle}
+                                disabled={isGenerating}
+                                style={{
+                                    ...inputStyle,
+                                    opacity: isGenerating ? 0.5 : 1,
+                                    cursor: isGenerating ? 'not-allowed' : 'pointer'
+                                }}
                             >
-                                {availableModels
-                                    .filter(m => !m.name?.toLowerCase().includes('wan') && !m.file_path?.toLowerCase().includes('wan'))
-                                    .map((m) => (
-                                        <option key={m.id} value={m.id}>
-                                            {m.name} {m.base_model === 'sdxl' ? '(SDXL)' : ''}
-                                        </option>
-                                    ))}
+                                {availableModels.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                        {m.name} {(m.base_model === 'sdxl' || m.metadata?.architecture === 'sdxl') ? '(SDXL)' : ''}
+                                    </option>
+                                ))}
                             </select>
                             {selectedModel?.base_model === 'sdxl' && (
                                 <p style={{ fontSize: '0.75rem', color: '#8b5cf6', marginTop: '0.5rem' }}>
