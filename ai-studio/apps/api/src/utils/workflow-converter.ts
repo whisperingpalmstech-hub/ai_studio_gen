@@ -256,7 +256,7 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
                 break;
             case "maskRefine": {
                 class_type = "ImpactGaussianBlurMask";
-                inputs["blur_radius"] = node.data.blur || 4;
+                inputs["kernel_size"] = node.data.blur || 4;
                 inputs["sigma"] = 1.0;
                 break;
             }
@@ -302,6 +302,10 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
         if (handleMap[inputName]) {
             inputName = handleMap[inputName];
         }
+
+        // Node-specific overrides
+        if (targetNode.class_type === "InpaintModelConditioning" && inputName === "image") inputName = "pixels";
+        if (targetNode.class_type === "InpaintModelConditioning" && inputName === "mask_in") inputName = "mask";
 
         // Specific override for VAE Decode which might use 'latents' or 'samples'
         if (targetNode.class_type === "VAEDecode" && inputName === "latent") {

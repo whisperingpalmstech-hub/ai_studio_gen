@@ -263,7 +263,7 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
             case "maskRefine":
                 class_type = "ImpactGaussianBlurMask";
                 inputs["mask"] = undefined; // handled by edges
-                inputs["blur_radius"] = node.data.blur || 4;
+                inputs["kernel_size"] = node.data.blur || 4;
                 inputs["sigma"] = 1.0;
                 break;
             case "inpaintConditioning":
@@ -292,9 +292,13 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
             "positive": "positive", "negative": "negative", "latent": "latent_image",
             "vae_in": "vae",
             "dino_model": "grounding_dino_model", "sam_model": "sam_model",
-            "mask_in": "mask", "vae_out": "vae", "image": "pixels"
+            "mask_in": "mask", "vae_out": "vae"
         };
         if (handleMap[inputName]) inputName = handleMap[inputName];
+
+        // Node-specific input name overrides
+        if (targetNode.class_type === "InpaintModelConditioning" && inputName === "image") inputName = "pixels";
+        if (targetNode.class_type === "InpaintModelConditioning" && inputName === "mask_in") inputName = "mask";
         if (targetNode.class_type === "VAEDecode" && inputName === "latent") inputName = "samples";
 
         if (inputName) {
