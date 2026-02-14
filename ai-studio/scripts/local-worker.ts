@@ -278,9 +278,7 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
             }
             case "inpaintConditioning":
                 class_type = "InpaintModelConditioning";
-                // InpaintModelConditioning does NOT have a noise_mask parameter.
-                // It takes: positive, negative, vae, pixels, mask (all linked)
-                // It outputs: positive (0), negative (1), latent (2)
+                inputs["noise_mask"] = node.data.noise_mask !== false;
                 break;
 
             default:
