@@ -290,7 +290,7 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
             "vae": "vae", "samples": "samples", "mask": "mask", "clip_vision": "clip_vision",
             "images": "images", "start_image": "start_image", "model": "model",
             "positive": "positive", "negative": "negative", "latent": "latent_image",
-            "clip": "clip", "vae_in": "vae",
+            "vae_in": "vae",
             "dino_model": "grounding_dino_model", "sam_model": "sam_model",
             "mask_in": "mask", "vae_out": "vae", "image": "pixels"
         };
@@ -739,6 +739,9 @@ async function processJob(job: any) {
             console.log(`🔄 Detected ReactFlow data structure. Converting for ComfyUI...`);
             await syncWorkflowAssets(workflow.nodes);
             workflow = convertReactFlowToComfyUI(workflow.nodes, workflow.edges);
+            console.log("------------------ FINAL COMFLOW JSON ------------------");
+            console.log(JSON.stringify(workflow, null, 2));
+            console.log("---------------------------------------------------------");
         }
 
         // 3. Send to ComfyUI

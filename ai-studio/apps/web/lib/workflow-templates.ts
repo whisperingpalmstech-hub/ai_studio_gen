@@ -263,7 +263,7 @@ export const WORKFLOW_TEMPLATES = [
             tips: 'Be specific with the Mask Prompt (e.g. "red shirt" instead of just "shirt").'
         },
         nodes: [
-            { id: '1', type: 'loadModel', position: { x: 50, y: 50 }, data: { label: 'SDXL Inpaint Model', model: 'sd_xl_inpaint_0.1.safetensors' } },
+            { id: '1', type: 'loadModel', position: { x: 50, y: 50 }, data: { label: 'Inpaint Model', model: 'realistic-vision-inpaint.safetensors' } },
             { id: '2', type: 'groundingDinoLoader', position: { x: 50, y: 200 }, data: { label: 'DINO Loader' } },
             { id: '3', type: 'samModelLoader', position: { x: 50, y: 350 }, data: { label: 'SAM Loader' } },
             { id: '4', type: 'loadImage', position: { x: 400, y: 50 }, data: { label: 'Source Image' } },
