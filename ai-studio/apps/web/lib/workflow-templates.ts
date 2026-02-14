@@ -4,6 +4,12 @@ export const WORKFLOW_TEMPLATES = [
         name: 'Standard Text-to-Image',
         description: 'The foundation of AI art. Generate high-quality images from pure text descriptions.',
         category: 'Essentials',
+        guide: {
+            summary: 'Generates images entirely from text. Best for conceptualizing new ideas.',
+            inputs: 'Checkpoint model, Positive/Negative prompts.',
+            params: 'Steps (20-30), CFG (7-9), Denoise (N/A).',
+            tips: 'Use descriptive adjectives. Detailed prompts yield better results.'
+        },
         nodes: [
             { id: '1', type: 'loadModel', position: { x: 50, y: 50 }, data: { label: 'Load Checkpoint' } },
             { id: '2', type: 'prompt', position: { x: 400, y: 50 }, data: { label: 'Positive Prompt', prompt: 'a beautiful futuristic city, high detail, 8k' } },
@@ -30,6 +36,12 @@ export const WORKFLOW_TEMPLATES = [
         name: 'Creative Image-to-Image',
         description: 'Transform existing images into new styles while maintaining composition and structure.',
         category: 'Transformation',
+        guide: {
+            summary: 'Redraws an existing image based on a prompt.',
+            inputs: 'Source Image, Checkpoint, Prompt.',
+            params: 'Denoise is critical: 0.4 (subtle) to 0.7 (strong change).',
+            tips: 'Lower Denoise keeps more of the original image structure.'
+        },
         nodes: [
             { id: '1', type: 'loadModel', position: { x: 50, y: 50 }, data: { label: 'Load Checkpoint' } },
             { id: '2', type: 'prompt', position: { x: 400, y: 50 }, data: { label: 'Positive Prompt', prompt: 'oil painting style, vibrant colors' } },
@@ -59,6 +71,12 @@ export const WORKFLOW_TEMPLATES = [
         name: 'LoRA Style Integration',
         description: 'Inject specific styles or characters into your generations using specialized LoRA models.',
         category: 'Advanced',
+        guide: {
+            summary: 'Loads secondary "LoRA" models to refine style or characters.',
+            inputs: 'Model, LoRA, Prompt.',
+            params: 'LoRA Strength: 0.6 - 1.0 recommended.',
+            tips: 'Multiple LoRAs can be chained for complex character + style combos.'
+        },
         nodes: [
             { id: '1', type: 'loadModel', position: { x: 50, y: 50 }, data: { label: 'Load Checkpoint' } },
             { id: '2', type: 'lora', position: { x: 350, y: 50 }, data: { label: 'Load LoRA', strength_model: 1.0, strength_clip: 1.0 } },
@@ -88,6 +106,12 @@ export const WORKFLOW_TEMPLATES = [
         name: 'Professional Inpainting',
         description: 'Edit specific parts of an image by masking them. Perfect for fixing details or changing objects.',
         category: 'Repair',
+        guide: {
+            summary: 'Replaces specific parts of an image using a drawn mask.',
+            inputs: 'Image + Mask, Inpaint Checkpoint (recommended).',
+            params: 'Denoise (0.5-0.7), Mask Blur (4-8).',
+            tips: 'White areas in the mask are what the AI will replace.'
+        },
         nodes: [
             { id: '1', type: 'loadModel', position: { x: 50, y: 50 }, data: { label: 'Inpaint Checkpoint', model: 'realistic-vision-inpaint.safetensors' } },
             { id: '2', type: 'prompt', position: { x: 400, y: 50 }, data: { label: 'Positive Prompt', prompt: 'a beautiful high quality face' } },
@@ -118,6 +142,12 @@ export const WORKFLOW_TEMPLATES = [
         name: 'ControlNet Edge Detection',
         description: 'Guided generation using structural constraints like Canny edges or Depth maps.',
         category: 'Transformation',
+        guide: {
+            summary: 'Strictly controls the shape of the generation using an input image.',
+            inputs: 'Control Image, ControlNet Model (Canny/Depth).',
+            params: 'ControlNet Strength: 0.8 - 1.2.',
+            tips: 'Perfect for turning sketches into photos or maintaining poses.'
+        },
         nodes: [
             { id: '1', type: 'loadModel', position: { x: 50, y: 50 }, data: { label: 'Load Checkpoint' } },
             { id: '2', type: 'prompt', position: { x: 700, y: 50 }, data: { label: 'Positive Prompt' } },
@@ -143,12 +173,17 @@ export const WORKFLOW_TEMPLATES = [
             { id: 'e8-9', source: '8', target: '9', sourceHandle: 'image', targetHandle: 'images' }
         ]
     },
-
     {
         id: 'tpl-wan-i2v',
         name: 'Wan 2.1 Image-to-Video',
         description: 'Transform a static image into a high-quality video using Wan 2.1.',
         category: 'Wan 2.1',
+        guide: {
+            summary: 'Animates a single image into a cinematic video.',
+            inputs: 'Source Image, Wan 2.1 I2V Model.',
+            params: 'Steps (30), CFG (6.0), Sampler (uni_pc_bh2).',
+            tips: 'Works best on high-resolution landscape images.'
+        },
         nodes: [
             { id: '1', type: 'unetLoader', position: { x: 50, y: 50 }, data: { label: 'Wan 2.1 Model', model: 'wan2.1_i2v_720p_14B_bf16.safetensors' } },
             { id: '2', type: 'vaeLoader', position: { x: 50, y: 200 }, data: { label: 'Wan VAE', model: 'wan_2.1_vae.safetensors' } },
@@ -187,6 +222,12 @@ export const WORKFLOW_TEMPLATES = [
         name: 'Wan 2.1 Text-to-Video',
         description: 'Generate videos from text descriptions using Wan 2.1.',
         category: 'Wan 2.1',
+        guide: {
+            summary: 'Generates video directly from text descriptions.',
+            inputs: 'Wan 2.1 T2V Model, CLIP T5, VAE.',
+            params: 'Steps (30), CFG (6.0).',
+            tips: 'Describe motion explicitly (e.g., "running", "exploding").'
+        },
         nodes: [
             { id: '1', type: 'unetLoader', position: { x: 50, y: 50 }, data: { label: 'Wan 2.1 Model', model: 'wan2.1_t2v_1.3B_bf16.safetensors' } },
             { id: '2', type: 'vaeLoader', position: { x: 50, y: 200 }, data: { label: 'Wan VAE', model: 'wan_2.1_vae.safetensors' } },

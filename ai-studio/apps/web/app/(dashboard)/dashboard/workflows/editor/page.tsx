@@ -47,6 +47,7 @@ import {
 } from '@/components/workflow/CustomNodes';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useWebSocket } from '@/lib/useWebSocket';
+import { WORKFLOW_TEMPLATES } from '@/lib/workflow-templates';
 
 const nodeTypes = {
     loadModel: LoadModelNode,
@@ -133,6 +134,9 @@ function WorkflowEditorContent() {
     const [executingNodeId, setExecutingNodeId] = useState<string | null>(null);
     const [activeJobId, setActiveJobId] = useState<string | null>(null);
     const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [showInfoPanel, setShowInfoPanel] = useState(true);
+    const [activeTemplate, setActiveTemplate] = useState<any>(null);
 
     const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
         setNotification({ message, type });
@@ -325,6 +329,10 @@ function WorkflowEditorContent() {
             const data = await response.json();
             if (data.workflow) {
                 setWorkflowName(data.workflow.name);
+
+                // Match with template to show guide
+                const template = WORKFLOW_TEMPLATES.find(t => t.name === data.workflow.name);
+                if (template) setActiveTemplate(template);
 
                 const activeCheckpoints = currentModels?.checkpoints || checkpoints;
                 const activeLoras = currentModels?.loras || loras;
@@ -652,81 +660,254 @@ function WorkflowEditorContent() {
                 </div>
             </div>
 
-            <div style={{ display: 'flex', height: '100%' }}>
-                {/* Left Node Sidebar */}
+            <div style={{ display: 'flex', height: '100%', position: 'relative' }}>
+
+                {/* Collapsible Node Library Panel */}
                 <div style={{
-                    width: '260px',
-                    background: '#18181b', // Lighter dark for better separation
-                    borderRight: '1px solid #27272a',
+                    width: sidebarCollapsed ? '0px' : '280px',
+                    height: '100%',
+                    background: '#18181b',
+                    borderRight: '1px solid rgba(255, 255, 255, 0.05)',
                     display: 'flex',
                     flexDirection: 'column',
-                    zIndex: 5
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    position: 'relative',
+                    overflow: 'visible',
+                    zIndex: 20
                 }}>
-                    <div style={{ padding: '16px', borderBottom: '1px solid #27272a' }}>
-                        <h3 style={{ color: 'white', fontSize: '12px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                            Node Library
-                        </h3>
-                    </div>
+                    {/* Toggle Button */}
+                    <button
+                        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                        title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                        style={{
+                            position: 'absolute',
+                            right: '-12px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: '#27272a',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            zIndex: 30,
+                            fontSize: '10px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                        }}
+                    >
+                        {sidebarCollapsed ? '❯' : '❮'}
+                    </button>
 
-                    <div style={{ padding: '12px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {[
-                            { type: 'loadModel', label: 'Load Checkpoint', color: '#818cf8', desc: 'Models & VAE' }, // Brighter Indigo
-                            { type: 'prompt', label: 'CLIP Text Encode', color: '#c084fc', desc: 'Prompts' },       // Brighter Purple
-                            { type: 'loadImage', label: 'Load Image', color: '#fbbf24', desc: 'Img2Img / Mask' },   // Amber
-                            { type: 'controlNet', label: 'Apply ControlNet', color: '#34d399', desc: 'Canny / Depth' }, // Emerald
-                            { type: 'sampler', label: 'KSampler', color: '#f87171', desc: 'Sampling' },             // Red
-                            { type: 'lora', label: 'Load LoRA', color: '#fbbf24', desc: 'Adjustments' },
-                            { type: 'upscale', label: 'Image Upscale', color: '#38bdf8', desc: 'Post-processing' }, // Sky
-                            { type: 'output', label: 'Save Image', color: '#4ade80', desc: 'Output' },              // Green
-                            { type: 'emptyLatent', label: 'Empty Latent', color: '#ec4899', desc: 'Resolution' },
-                            { type: 'vaeEncode', label: 'VAE Encode', color: '#ef4444', desc: 'Pixels to Latent' },
-                            { type: 'vaeDecode', label: 'VAE Decode', color: '#ef4444', desc: 'Latent to Pixels' },
-                            { type: 'faceSwap', label: 'Face Swap', color: '#8b5cf6', desc: 'Reactor' },
-                            { type: 'inpaint', label: 'Inpaint', color: '#f59e0b', desc: 'Masking' },
-                        ].map((node) => (
-                            <button
-                                key={node.type}
-                                onClick={() => addNode(node.type)}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    padding: '10px',
-                                    borderRadius: '8px',
-                                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                                    background: '#27272a', // Zinc 800 - distinct from sidebar
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    textAlign: 'left',
-                                    transition: 'all 0.2s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = '#3f3f46'; // Lighter on hover
-                                    e.currentTarget.style.borderColor = node.color;
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = '#27272a';
-                                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
-                                }}
-                            >
-                                <div style={{
-                                    width: '10px',
-                                    height: '10px',
-                                    borderRadius: '2px',
-                                    background: node.color,
-                                    boxShadow: `0 0 8px ${node.color}40`
-                                }} />
-                                <div>
-                                    <div style={{ fontSize: '13px', fontWeight: 600 }}>{node.label}</div>
-                                    <div style={{ fontSize: '11px', color: '#a1a1aa' }}>{node.desc}</div>
+                    {!sidebarCollapsed && (
+                        <>
+                            <div style={{ padding: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    Node Library
+                                </h2>
+                                <p style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
+                                    Drag or click to add nodes
+                                </p>
+                            </div>
+
+                            <div style={{ padding: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type="text"
+                                        placeholder="Search nodes..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            background: '#27272a',
+                                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                                            borderRadius: '6px',
+                                            padding: '8px 12px',
+                                            paddingLeft: '32px',
+                                            color: 'white',
+                                            fontSize: '13px',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                    <div style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#71717a', fontSize: '14px' }}>
+                                        🔍
+                                    </div>
                                 </div>
-                            </button>
-                        ))}
-                    </div>
+                            </div>
+
+                            <div style={{ padding: '12px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {allNodeTypes.filter(n =>
+                                    n.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                    n.type.toLowerCase().includes(searchQuery.toLowerCase())
+                                ).map((node) => (
+                                    <button
+                                        key={node.type}
+                                        onClick={() => addNode(node.type)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            padding: '10px',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                                            background: '#27272a',
+                                            color: 'white',
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = '#3f3f46';
+                                            e.currentTarget.style.borderColor = node.color;
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = '#27272a';
+                                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: '10px',
+                                            height: '10px',
+                                            borderRadius: '2px',
+                                            background: node.color,
+                                            boxShadow: `0 0 8px ${node.color}40`
+                                        }} />
+                                        <div>
+                                            <div style={{ fontSize: '13px', fontWeight: 600 }}>{node.label}</div>
+                                            <div style={{ fontSize: '11px', color: '#a1a1aa' }}>{node.type}</div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
                 </div>
 
-                {/* ReactFlow Canvas */}
+                {/* ReactFlow Canvas Container */}
                 <div style={{ flex: 1, height: '100%', position: 'relative' }}>
+
+                    {/* Template Info / Guide Panel */}
+                    {activeTemplate && showInfoPanel && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '20px',
+                            right: '20px',
+                            width: '320px',
+                            maxHeight: 'calc(100% - 40px)',
+                            overflowY: 'auto',
+                            background: 'rgba(24, 24, 27, 0.95)',
+                            backdropFilter: 'blur(16px)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '16px',
+                            zIndex: 15,
+                            padding: '24px',
+                            boxShadow: '0 10px 40px rgba(0,0,0,0.6)',
+                            animation: 'slideIn 0.3s ease-out'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                                <div>
+                                    <h3 style={{ color: 'white', fontSize: '16px', fontWeight: 700, margin: 0 }}>{activeTemplate.name}</h3>
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                        <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, textTransform: 'uppercase' }}>
+                                            {activeTemplate.category}
+                                        </span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowInfoPanel(false)}
+                                    style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', padding: '4px' }}
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            <p style={{ color: '#d4d4d8', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px 0' }}>
+                                {activeTemplate.description}
+                            </p>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ color: '#818cf8', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
+                                        🎯 Summary
+                                    </div>
+                                    <div style={{ color: 'white', fontSize: '12px', lineHeight: '1.4' }}>{activeTemplate.guide.summary}</div>
+                                </div>
+
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ color: '#34d399', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
+                                        📥 Recommended Inputs
+                                    </div>
+                                    <div style={{ color: 'white', fontSize: '12px', lineHeight: '1.4' }}>{activeTemplate.guide.inputs}</div>
+                                </div>
+
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ color: '#fbbf24', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
+                                        ⚙️ Top Parameters
+                                    </div>
+                                    <div style={{ color: 'white', fontSize: '12px', lineHeight: '1.4' }}>{activeTemplate.guide.params}</div>
+                                </div>
+
+                                <div style={{ background: 'rgba(244, 63, 94, 0.1)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
+                                    <div style={{ color: '#f43f5e', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
+                                        💡 Pro Tips
+                                    </div>
+                                    <div style={{ color: 'white', fontSize: '12px', fontStyle: 'italic', lineHeight: '1.4' }}>"{activeTemplate.guide.tips}"</div>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setShowInfoPanel(false)}
+                                style={{
+                                    width: '100%',
+                                    marginTop: '20px',
+                                    padding: '10px',
+                                    borderRadius: '8px',
+                                    background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                                    color: 'white',
+                                    border: 'none',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+                                }}
+                            >
+                                Got it, let's build!
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Show Guide Toggle (when hidden) */}
+                    {activeTemplate && !showInfoPanel && (
+                        <button
+                            onClick={() => setShowInfoPanel(true)}
+                            style={{
+                                position: 'absolute',
+                                top: '20px',
+                                right: '20px',
+                                background: 'rgba(24, 24, 27, 0.8)',
+                                color: 'white',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                borderRadius: '10px',
+                                padding: '8px 16px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                zIndex: 15,
+                                backdropFilter: 'blur(12px)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                            }}
+                        >
+                            <span style={{ fontSize: '16px' }}>💡</span>
+                            Quick Guide
+                        </button>
+                    )}
+
                     <ReactFlow
                         nodes={nodes}
                         edges={edges}
@@ -742,16 +923,13 @@ function WorkflowEditorContent() {
                         style={{ background: '#09090b' }}
                         proOptions={{ hideAttribution: true }}
                     >
-                        <Background color="#3f3f46" gap={20} size={1} />
+                        <Background color="#18181b" gap={20} size={1} />
                         <Controls
                             style={{
                                 background: '#27272a',
-                                border: '1px solid #3f3f46',
-                                borderRadius: '8px',
-                                color: 'white',
-                                fill: 'white'
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                borderRadius: '8px'
                             }}
-                            showInteractive={false}
                         />
 
                         {/* Search Palette Overlay */}
@@ -761,13 +939,14 @@ function WorkflowEditorContent() {
                                 left: clickPosition.x,
                                 top: clickPosition.y,
                                 width: '240px',
-                                background: '#18181b',
-                                border: '1px solid #3f3f46',
+                                background: 'rgba(24, 24, 27, 0.95)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
                                 borderRadius: '8px',
-                                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                                boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
                                 zIndex: 1000,
                                 padding: '8px',
-                                animation: 'fadeIn 0.1s ease-out'
+                                animation: 'fadeIn 0.1s ease-out',
+                                backdropFilter: 'blur(12px)'
                             }}>
                                 <input
                                     autoFocus
@@ -777,7 +956,7 @@ function WorkflowEditorContent() {
                                     style={{
                                         width: '100%',
                                         background: '#09090b',
-                                        border: '1px solid #27272a',
+                                        border: '1px solid rgba(255, 255, 255, 0.05)',
                                         borderRadius: '4px',
                                         padding: '8px',
                                         color: 'white',
@@ -787,7 +966,12 @@ function WorkflowEditorContent() {
                                     }}
                                 />
                                 <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                                    {filteredNodeTypes.map(n => (
+                                    {[
+                                        ...allNodeTypes
+                                    ].filter(n =>
+                                        n.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                        n.type.toLowerCase().includes(searchQuery.toLowerCase())
+                                    ).map(n => (
                                         <div
                                             key={n.type}
                                             onClick={() => addNode(n.type, { x: clickPosition.x, y: clickPosition.y })}
@@ -802,7 +986,7 @@ function WorkflowEditorContent() {
                                                 color: '#d1d5db',
                                                 transition: 'background 0.2s'
                                             }}
-                                            onMouseEnter={(e) => e.currentTarget.style.background = '#27272a'}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
                                             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                                         >
                                             <div style={{ width: '8px', height: '8px', background: n.color, borderRadius: '2px' }} />
@@ -819,7 +1003,7 @@ function WorkflowEditorContent() {
                                 return colors[n.type || ''] || '#71717a';
                             }}
                             maskColor="rgba(9, 9, 11, 0.8)"
-                            style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
+                            style={{ background: '#18181b', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '8px' }}
                         />
                     </ReactFlow>
                 </div>
@@ -877,6 +1061,7 @@ function WorkflowEditorContent() {
                     to { opacity: 1; transform: translateY(0); }
                 }
             `}</style>
+
         </div>
     );
 }

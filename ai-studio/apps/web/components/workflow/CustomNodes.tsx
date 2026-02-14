@@ -2,7 +2,7 @@
 
 import React, { memo, useState, useRef, useEffect } from 'react';
 import { Handle, Position, useReactFlow } from 'reactflow';
-import { Settings, Image as ImageIcon, Box, Type, Zap, Maximize, Save, Upload, Activity, Eye } from 'lucide-react';
+import { Settings, Image as ImageIcon, Box, Type, Zap, Maximize, Save, Upload, Activity, Eye, Info } from 'lucide-react';
 
 // --- Design System ---
 const colors = {
@@ -116,6 +116,55 @@ const NodeHeader = ({ label, color, icon: Icon }: any) => (
         </div>
     </div>
 );
+
+const Tooltip = ({ text }: { text: string }) => {
+    const [visible, setVisible] = useState(false);
+    return (
+        <span
+            style={{ position: 'relative', cursor: 'help' }}
+            onMouseEnter={() => setVisible(true)}
+            onMouseLeave={() => setVisible(false)}
+        >
+            <Info size={12} style={{ color: colors.textMuted, marginLeft: '6px', verticalAlign: 'middle', opacity: 0.8 }} />
+            {visible && (
+                <div style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    marginBottom: '10px',
+                    padding: '10px 12px',
+                    background: '#2a2a35',
+                    border: '1px solid #3f3f4e',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '11px',
+                    whiteSpace: 'normal',
+                    width: '180px',
+                    zIndex: 1000,
+                    boxShadow: '0 10px 20px rgba(0,0,0,0.6)',
+                    pointerEvents: 'none',
+                    lineHeight: '1.5',
+                    textTransform: 'none',
+                    fontWeight: 400,
+                    textAlign: 'left'
+                }}>
+                    {text}
+                    {/* Arrow */}
+                    <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: '50%',
+                        marginLeft: '-6px',
+                        borderWidth: '6px',
+                        borderStyle: 'solid',
+                        borderColor: '#2a2a35 transparent transparent transparent'
+                    }} />
+                </div>
+            )}
+        </span>
+    );
+};
 
 const IOHandle = ({ type, position, color = colors.handles, label, id }: any) => (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: '10px' }}>
@@ -250,7 +299,10 @@ export const SamplerNode = memo(({ id, data }: any) => {
             <div style={styles.body}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>Seed</label>
+                        <label style={styles.label}>
+                            Seed
+                            <Tooltip text="The random starting point for generation. Same seed + same settings = identical image." />
+                        </label>
                         <div style={{ display: 'flex', gap: '4px' }}>
                             <input
                                 type="number"
@@ -268,7 +320,10 @@ export const SamplerNode = memo(({ id, data }: any) => {
                     </div>
 
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>Steps ({localSteps})</label>
+                        <label style={styles.label}>
+                            Steps ({localSteps})
+                            <Tooltip text="Number of refinement iterations. More steps = more detail, fewer steps = faster generation." />
+                        </label>
                         <input
                             type="range"
                             min={1} max={100}
@@ -285,7 +340,10 @@ export const SamplerNode = memo(({ id, data }: any) => {
                     </div>
 
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>CFG ({localCFG})</label>
+                        <label style={styles.label}>
+                            CFG ({localCFG})
+                            <Tooltip text="Classifier-Free Guidance. Higher values force the AI to follow your prompt more strictly." />
+                        </label>
                         <input
                             type="range"
                             min={1} max={30} step={0.5}
@@ -302,7 +360,10 @@ export const SamplerNode = memo(({ id, data }: any) => {
                     </div>
 
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>Denoise ({localDenoise})</label>
+                        <label style={styles.label}>
+                            Denoise ({localDenoise})
+                            <Tooltip text="How much of the initial noise or latent image to change. 1.0 means complete transformation." />
+                        </label>
                         <input
                             type="range"
                             min={0} max={1} step={0.01}
@@ -456,7 +517,10 @@ export const LoRANode = memo(({ id, data }: any) => {
                     </select>
                 </div>
                 <div style={styles.inputGroup}>
-                    <label style={styles.label}>Strength Model ({localStrengthModel})</label>
+                    <label style={styles.label}>
+                        Strength Model ({localStrengthModel})
+                        <Tooltip text="How strongly the LoRA affects the model's visual style. 1.0 is standard." />
+                    </label>
                     <input
                         type="range"
                         min={0} max={2} step={0.05}
@@ -472,7 +536,10 @@ export const LoRANode = memo(({ id, data }: any) => {
                     />
                 </div>
                 <div style={styles.inputGroup}>
-                    <label style={styles.label}>Strength Clip ({localStrengthClip})</label>
+                    <label style={styles.label}>
+                        Strength Clip ({localStrengthClip})
+                        <Tooltip text="How strongly the LoRA affects the model's understanding of text prompts." />
+                    </label>
                     <input
                         type="range"
                         min={0} max={2} step={0.05}
@@ -900,7 +967,10 @@ export const ControlNetNode = memo(({ id, data }: any) => {
                     </select>
                 </div>
                 <div style={styles.inputGroup}>
-                    <label style={styles.label}>Strength ({localStrength})</label>
+                    <label style={styles.label}>
+                        Strength ({localStrength})
+                        <Tooltip text="How strongly the ControlNet influences the generation structure." />
+                    </label>
                     <input
                         type="range"
                         min={0} max={2} step={0.05}
@@ -948,7 +1018,10 @@ export const UpscaleNode = memo(({ id, data }: any) => {
                     </select>
                 </div>
                 <div style={styles.inputGroup}>
-                    <label style={styles.label}>Scale Factor</label>
+                    <label style={styles.label}>
+                        Scale Factor
+                        <Tooltip text="The multiplier for the image resolution. 2.0 = 2x larger." />
+                    </label>
                     <input
                         type="number"
                         defaultValue={data.upscale_factor || 2.0}
@@ -975,7 +1048,10 @@ export const EmptyLatentImageNode = memo(({ id, data }: any) => {
             <div style={styles.body}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>Width</label>
+                        <label style={styles.label}>
+                            Width
+                            <Tooltip text="Width of the generated image. Most models prefer 512, 768, or 1024." />
+                        </label>
                         <input
                             type="number"
                             defaultValue={data.width || 512}
@@ -985,7 +1061,10 @@ export const EmptyLatentImageNode = memo(({ id, data }: any) => {
                         />
                     </div>
                     <div style={styles.inputGroup}>
-                        <label style={styles.label}>Height</label>
+                        <label style={styles.label}>
+                            Height
+                            <Tooltip text="Height of the generated image. Most models prefer 512, 768, or 1024." />
+                        </label>
                         <input
                             type="number"
                             defaultValue={data.height || 512}
@@ -996,7 +1075,10 @@ export const EmptyLatentImageNode = memo(({ id, data }: any) => {
                     </div>
                 </div>
                 <div style={styles.inputGroup}>
-                    <label style={styles.label}>Batch Size</label>
+                    <label style={styles.label}>
+                        Batch Size
+                        <Tooltip text="Number of images to generate at once. Higher values require more VRAM." />
+                    </label>
                     <input
                         type="number"
                         defaultValue={data.batch_size || 1}
