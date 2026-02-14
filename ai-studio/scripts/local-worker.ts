@@ -260,12 +260,22 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
                 inputs["prompt"] = node.data.prompt || "";
                 inputs["threshold"] = node.data.threshold || 0.3;
                 break;
-            case "maskRefine":
+            case "maskRefine": {
+                // Grow 6px, Blur 2px as requested
+                const dilateId = `${node.id}_dilate`;
+                comfyWorkflow[dilateId] = {
+                    class_type: "ImpactDilateMask",
+                    inputs: {
+                        mask: undefined, // assigned in edge loop
+                        dilation: node.data.grow ?? 6
+                    }
+                };
                 class_type = "ImpactGaussianBlurMask";
-                inputs["mask"] = undefined; // handled by edges
-                inputs["kernel_size"] = node.data.blur || 4;
+                inputs["mask"] = [dilateId, 0];
+                inputs["kernel_size"] = node.data.blur ?? 2;
                 inputs["sigma"] = 1.0;
                 break;
+            }
             case "inpaintConditioning":
                 class_type = "InpaintModelConditioning";
                 inputs["noise_mask"] = node.data.noise_mask !== false;
@@ -280,8 +290,15 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
     });
 
     edges.forEach(edge => {
-        const targetNode = comfyWorkflow[edge.target];
+        let targetId = edge.target;
+        let targetNode = comfyWorkflow[targetId];
         if (!targetNode) return;
+
+        // Redirect to dilation node for maskRefine inputs
+        if (nodes.find(n => n.id === edge.target)?.type === "maskRefine") {
+            targetId = `${edge.target}_dilate`;
+            targetNode = comfyWorkflow[targetId];
+        }
 
         let inputName = edge.targetHandle || "";
         const handleMap: Record<string, string> = {
