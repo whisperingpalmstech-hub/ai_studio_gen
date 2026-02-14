@@ -244,6 +244,29 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
                 inputs["batch_size"] = 1;
                 break;
 
+            // === Auto-Masking (Segment Anything) ===
+            case "groundingDinoLoader":
+                class_type = "GroundingDinoModelLoader (segment anything)";
+                inputs["model_name"] = node.data.model || "GroundingDINO_SwinT_OGC (694MB)";
+                break;
+            case "samModelLoader":
+                class_type = "SAMModelLoader (segment anything)";
+                inputs["model_name"] = node.data.model || "sam_vit_h (2.56GB)";
+                break;
+            case "groundingDinoSAMSegment":
+                class_type = "GroundingDinoSAMSegment (segment anything)";
+                inputs["prompt"] = node.data.prompt || "";
+                inputs["threshold"] = node.data.threshold || 0.3;
+                break;
+            case "maskRefine":
+                class_type = "MaskBlur"; // Impact Pack
+                inputs["blur"] = node.data.blur || 4;
+                inputs["falloff"] = 1;
+                break;
+            case "inpaintConditioning":
+                class_type = "InpaintModelConditioning";
+                break;
+
             default:
                 class_type = node.type;
                 inputs = { ...node.data };
@@ -263,7 +286,9 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
             "vae": "vae", "samples": "samples", "mask": "mask", "clip_vision": "clip_vision",
             "images": "images", "start_image": "start_image", "model": "model",
             "positive": "positive", "negative": "negative", "latent": "latent_image",
-            "clip": "clip", "vae_in": "vae"
+            "clip": "clip", "vae_in": "vae",
+            "dino_model": "grounding_dino_model", "sam_model": "sam_model",
+            "mask_in": "mask", "vae_out": "vae"
         };
         if (handleMap[inputName]) inputName = handleMap[inputName];
         if (targetNode.class_type === "VAEDecode" && inputName === "latent") inputName = "samples";
@@ -294,6 +319,17 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
                 } else {
                     outputIndex = 0;
                 }
+            } else if (sourceNode?.type === "groundingDinoLoader" || sourceNode?.type === "samModelLoader") {
+                outputIndex = 0;
+            } else if (sourceNode?.type === "groundingDinoSAMSegment") {
+                if (sourceHandle === "image_out") outputIndex = 0;
+                else outputIndex = 1; // mask
+            } else if (sourceNode?.type === "maskRefine") {
+                outputIndex = 0;
+            } else if (sourceNode?.type === "inpaintConditioning") {
+                if (sourceHandle === "cond_pos") outputIndex = 0;
+                else if (sourceHandle === "cond_neg") outputIndex = 1;
+                else outputIndex = 2; // latent
             }
             // Add other index mappings as needed, but default 0 works for most
 

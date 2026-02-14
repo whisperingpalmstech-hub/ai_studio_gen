@@ -242,23 +242,20 @@ export function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFl
 
             // === Auto-Masking (Segment Anything) ===
             case "groundingDinoLoader":
-                class_type = "GroundingDinoModelLoader";
+                class_type = "GroundingDinoModelLoader (segment anything)";
                 inputs["model_name"] = node.data.model || "GroundingDINO_SwinT_OGC (694MB)";
                 break;
             case "samModelLoader":
-                class_type = "SAMModelLoader";
+                class_type = "SAMModelLoader (segment anything)";
                 inputs["model_name"] = node.data.model || "sam_vit_h (2.56GB)";
                 break;
             case "groundingDinoSAMSegment":
-                class_type = "GroundingDinoSAMSegment";
+                class_type = "GroundingDinoSAMSegment (segment anything)";
                 inputs["prompt"] = node.data.prompt || "";
                 inputs["threshold"] = node.data.threshold || 0.3;
                 break;
             case "maskRefine": {
-                // We'll create a chain or a single node if available. 
-                // Many versions of ComfyUI have GrowMask/MaskBlur available via extensions.
-                // For now, we'll map to standard nodes or Impact Pack if installed.
-                class_type = "MaskBlur"; // Default to blur
+                class_type = "MaskBlur";
                 inputs["blur"] = node.data.blur || 4;
                 break;
             }
