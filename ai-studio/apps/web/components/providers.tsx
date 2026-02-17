@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { EnterpriseToaster } from "@/components/ui/enterprise-toast";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 
 interface ProvidersProps {
     children: ReactNode;
@@ -27,6 +28,8 @@ export function Providers({ children }: ProvidersProps) {
         <QueryClientProvider client={queryClient}>
             {children}
             <EnterpriseToaster />
+            <ConfirmModal />
         </QueryClientProvider>
     );
 }
+

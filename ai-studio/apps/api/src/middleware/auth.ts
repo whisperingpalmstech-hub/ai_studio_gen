@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import { config } from "../config/index.js";
 
 // Supabase admin client (bypasses RLS)
@@ -186,6 +187,47 @@ export async function optionalAuthMiddleware(
     next();
 }
 
+
+/**
+ * Look up a user-generated API key from the api_keys table.
+ * Keys are stored as SHA256 hashes; we hash the incoming key and match.
+ * Returns the owner's AuthUser if found and active, or null.
+ */
+async function lookupUserApiKey(rawKey: string): Promise<AuthUser | null> {
+    const keyHash = createHash("sha256").update(rawKey).digest("hex");
+
+    const { data: keyRow, error } = await supabase
+        .from("api_keys")
+        .select("user_id")
+        .eq("key_hash", keyHash)
+        .eq("is_active", true)
+        .single();
+
+    if (error || !keyRow) return null;
+
+    // Update last_used_at
+    await supabase
+        .from("api_keys")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("key_hash", keyHash);
+
+    // Fetch the key owner's profile
+    const { data: profile } = await supabase
+        .from("profiles")
+        .select("tier, credits, email")
+        .eq("id", keyRow.user_id)
+        .single();
+
+    if (!profile) return null;
+
+    return {
+        id: keyRow.user_id,
+        email: profile.email || "",
+        tier: profile.tier || "free",
+        credits: profile.credits || 0,
+    };
+}
+
 // API Key middleware for external app access
 export async function apiKeyMiddleware(
     req: AuthenticatedRequest,
@@ -194,22 +236,38 @@ export async function apiKeyMiddleware(
 ) {
     const apiKey = req.headers["x-api-key"] as string;
 
-    if (!apiKey || !config.apiKey || apiKey !== config.apiKey) {
+    if (!apiKey) {
         return res.status(401).json({
             error: "Unauthorized",
-            message: "Invalid or missing API key. Set x-api-key header.",
+            message: "Missing API key. Set x-api-key header.",
         });
     }
 
     try {
-        // Get or create the system user (real UUID in auth.users + profiles)
-        req.user = await getOrCreateSystemUser();
-        next();
+        // 1. Check legacy system API key
+        if (config.apiKey && apiKey === config.apiKey) {
+            req.user = await getOrCreateSystemUser();
+            return next();
+        }
+
+        // 2. Check user-generated API keys (aisk_ prefix)
+        if (apiKey.startsWith("aisk_")) {
+            const user = await lookupUserApiKey(apiKey);
+            if (user) {
+                req.user = user;
+                return next();
+            }
+        }
+
+        return res.status(401).json({
+            error: "Unauthorized",
+            message: "Invalid API key.",
+        });
     } catch (error) {
         console.error("API Key auth error:", error);
         return res.status(500).json({
             error: "Internal Server Error",
-            message: "Failed to initialize API system user",
+            message: "Failed to authenticate API key",
         });
     }
 }
@@ -220,21 +278,34 @@ export async function flexAuthMiddleware(
     res: Response,
     next: NextFunction
 ) {
-    // Try API key first
     const apiKey = req.headers["x-api-key"] as string;
-    if (apiKey && config.apiKey && apiKey === config.apiKey) {
-        try {
-            req.user = await getOrCreateSystemUser();
-            return next();
-        } catch (error) {
-            console.error("API Key auth error:", error);
-            return res.status(500).json({
-                error: "Internal Server Error",
-                message: "Failed to initialize API system user",
-            });
+
+    if (apiKey) {
+        // 1. Check legacy system API key
+        if (config.apiKey && apiKey === config.apiKey) {
+            try {
+                req.user = await getOrCreateSystemUser();
+                return next();
+            } catch (error) {
+                console.error("API Key auth error:", error);
+                return res.status(500).json({
+                    error: "Internal Server Error",
+                    message: "Failed to initialize API system user",
+                });
+            }
+        }
+
+        // 2. Check user-generated API keys
+        if (apiKey.startsWith("aisk_")) {
+            const user = await lookupUserApiKey(apiKey);
+            if (user) {
+                req.user = user;
+                return next();
+            }
         }
     }
 
     // Fall back to Supabase JWT auth
     return authMiddleware(req, res, next);
 }
+

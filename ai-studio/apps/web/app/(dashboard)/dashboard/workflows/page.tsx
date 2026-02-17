@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { enterpriseToast } from "@/components/ui/enterprise-toast";
+import { styledConfirm } from "@/components/ui/confirm-modal";
 import { Plus, Play, Trash2, Edit, Loader2, Calendar, Link as LinkIcon, Zap, Layout, Brush, History, Layers } from "lucide-react";
 import { WORKFLOW_TEMPLATES } from "@/lib/workflow-templates";
 
@@ -46,7 +47,8 @@ export default function WorkflowsPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this workflow? This action cannot be undone.")) return;
+        const ok = await styledConfirm({ title: "Delete Workflow?", message: "Are you sure you want to delete this workflow? This action cannot be undone.", confirmLabel: "Delete", variant: "danger" });
+        if (!ok) return;
 
         setDeletingId(id);
         try {

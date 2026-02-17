@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { enterpriseToast } from "@/components/ui/enterprise-toast";
+import { styledConfirm } from "@/components/ui/confirm-modal";
 import {
     Sparkles,
     Settings2,
@@ -27,10 +28,10 @@ import { useWebSocket } from "../../../../lib/useWebSocket";
 import { useJobRealtime } from "../../../../lib/useJobRealtime";
 
 const MODES = [
-    { id: "txt2img", label: "Text to Image", icon: Sparkles },
-    { id: "img2img", label: "Image to Image", icon: ImageIcon },
-    { id: "inpaint", label: "Inpainting", icon: Brush },
-    { id: "upscale", label: "Upscale", icon: Maximize },
+    { id: "txt2img", label: "Text to Image", icon: Sparkles, cost: 1 },
+    { id: "img2img", label: "Image to Image", icon: ImageIcon, cost: 1 },
+    { id: "inpaint", label: "Inpainting", icon: Brush, cost: 2 },
+    { id: "upscale", label: "Upscale", icon: Maximize, cost: 1 },
 ];
 
 const SAMPLERS = [
@@ -514,6 +515,9 @@ export default function GeneratePage() {
             if (data.credits !== undefined) {
                 setCredits(data.credits);
             }
+            if (data.creditCost) {
+                enterpriseToast.success("Job Queued", `Generation started • ${data.creditCost} credit${data.creditCost > 1 ? 's' : ''} deducted`);
+            }
 
         } catch (error: any) {
             console.error("Generation error:", error);
@@ -659,7 +663,12 @@ export default function GeneratePage() {
                     <Zap size={18} style={{ color: '#6366f1' }} />
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                         <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>{credits}</span>
-                        <span style={{ color: '#9ca3af', fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Generations left</span>
+                        <span style={{ color: '#9ca3af', fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Credits left</span>
+                    </div>
+                    <div style={{ width: '1px', height: '1.5rem', background: 'rgba(255,255,255,0.1)' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#818cf8', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>{MODES.find(m => m.id === mode)?.cost ?? 1}</span>
+                        <span style={{ color: '#9ca3af', fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cost</span>
                     </div>
                 </div>
             </div>
@@ -1131,7 +1140,7 @@ export default function GeneratePage() {
                     )}
 
                     <p style={{ fontSize: '0.75rem', textAlign: 'center', color: '#9ca3af' }}>
-                        This will use 1 credit • You have {credits} credits remaining
+                        This will use {MODES.find(m => m.id === mode)?.cost ?? 1} credit{(MODES.find(m => m.id === mode)?.cost ?? 1) > 1 ? 's' : ''} • You have {credits} credits remaining
                     </p>
                 </div>
 
@@ -1446,7 +1455,8 @@ function ActiveJobsList({ refreshKey }: { refreshKey: number }) {
     }, [refreshKey, lastUpdate]);
 
     const handleCancel = async (jobId: string) => {
-        if (!confirm("Cancel/Delete this job?")) return;
+        const ok = await styledConfirm({ title: "Cancel Job?", message: "This will cancel and remove this job from the queue.", confirmLabel: "Cancel Job", variant: "danger" });
+        if (!ok) return;
         try {
             const res = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
             if (!res.ok) {
@@ -1461,7 +1471,8 @@ function ActiveJobsList({ refreshKey }: { refreshKey: number }) {
     };
 
     const handleClearAll = async () => {
-        if (!confirm("Are you sure? This will delete ALL pending and active jobs.")) return;
+        const ok = await styledConfirm({ title: "Clear All Jobs?", message: "This will delete ALL pending and active jobs. This cannot be undone.", confirmLabel: "Clear All", variant: "danger" });
+        if (!ok) return;
         try {
             const res = await fetch(`/api/jobs/all`, { method: 'DELETE' });
             if (!res.ok) {
@@ -1597,7 +1608,8 @@ function RecentGenerationsGrid({ refreshKey }: { refreshKey: number }) {
 
     const handleDelete = async (e: React.MouseEvent, assetId: string) => {
         e.stopPropagation();
-        if (!confirm("Permanently delete this generation?")) return;
+        const ok = await styledConfirm({ title: "Delete Generation?", message: "This will permanently delete this generation. This cannot be undone.", confirmLabel: "Delete", variant: "danger" });
+        if (!ok) return;
 
         // Optimistic UI Update
         const previousRecent = [...recent];

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { enterpriseToast } from "@/components/ui/enterprise-toast";
+import { styledConfirm } from "@/components/ui/confirm-modal";
 import {
     Sparkles,
     Settings2,
@@ -430,6 +431,9 @@ export default function GenerateVideoPage() {
             if (data.credits !== undefined) {
                 setCredits(data.credits);
             }
+            if (data.creditCost) {
+                enterpriseToast.success("Job Queued", `Video generation started • ${data.creditCost} credits deducted`);
+            }
 
         } catch (error: any) {
             console.error("Generation error:", error);
@@ -578,7 +582,12 @@ export default function GenerateVideoPage() {
                     <Zap size={18} style={{ color: '#a855f7' }} />
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                         <span style={{ color: 'white', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>{credits}</span>
-                        <span style={{ color: '#a78bfa', fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Studio credits</span>
+                        <span style={{ color: '#a78bfa', fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Credits left</span>
+                    </div>
+                    <div style={{ width: '1px', height: '1.5rem', background: 'rgba(255,255,255,0.1)' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#a78bfa', fontWeight: 'bold', fontSize: '1rem', lineHeight: 1 }}>5</span>
+                        <span style={{ color: '#a78bfa', fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cost</span>
                     </div>
                 </div>
             </div>
@@ -1208,7 +1217,8 @@ function RecentVideosGrid({ refreshKey }: { refreshKey: number }) {
 
     const handleDelete = async (e: React.MouseEvent, assetId: string) => {
         e.stopPropagation();
-        if (!confirm("Permanently archive this production?")) return;
+        const ok = await styledConfirm({ title: "Delete Video?", message: "This will permanently delete this video production. This cannot be undone.", confirmLabel: "Delete", variant: "danger" });
+        if (!ok) return;
 
         // Optimistic UI Update
         const previousVideos = [...videos];
