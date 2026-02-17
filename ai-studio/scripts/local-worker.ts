@@ -1018,7 +1018,7 @@ const generateSimpleWorkflow = (params: any) => {
         // CRITICAL: Always use the smart analyzer's denoise — the frontend slider (0.75)
         // is way too high for inpainting and WILL regenerate the person's face.
         // For clothing-only changes, 0.4-0.55 preserves identity while changing textures.
-        const autoDenoise = Math.min(analysis.denoise, 0.5);
+        const autoDenoise = Math.min(analysis.denoise, 0.45);
         const autoThreshold = analysis.dinoThreshold;
         const autoMaskDilation = analysis.maskDilation;
 
@@ -1156,7 +1156,7 @@ const generateSimpleWorkflow = (params: any) => {
                 cfg: Number(params.cfg_scale) || 7.0,
                 sampler_name: comfySampler,
                 scheduler: scheduler,
-                denoise: 0.35
+                denoise: autoDenoise
             }
         };
 
