@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { enterpriseToast } from "@/components/ui/enterprise-toast";
 import {
     Sparkles,
     Settings2,
@@ -221,7 +222,7 @@ export default function GeneratePage() {
                 } else if (update.status === 'failed') {
                     setIsGenerating(false);
                     setCurrentJobId(null);
-                    alert(`Generation Failed: ${update.error_message || 'Internal error'}`);
+                    enterpriseToast.error("Generation Failed", update.error_message || 'Internal error');
                 }
             }
         };
@@ -298,7 +299,7 @@ export default function GeneratePage() {
                 setIsGenerating(false);
                 setProgress(0);
                 setCurrentJobId(null);
-                alert(`Job Failed: ${update.error_message || 'Unknown error'}`);
+                enterpriseToast.error("Job Failed", update.error_message || 'Unknown error');
             } else if (update.current_node) {
                 const nodeLabel = !isNaN(Number(update.current_node)) ? `Node ${update.current_node}` : update.current_node;
                 setStatusMessage(`Status: ${nodeLabel} (${update.progress}%)`);
@@ -328,7 +329,7 @@ export default function GeneratePage() {
             } else if (type === "job_failed") {
                 setIsGenerating(false);
                 setCurrentJobId(null);
-                alert(`Job Failed: ${lastMessage.error || 'Unknown error'}`);
+                enterpriseToast.error("Job Failed", lastMessage.error || 'Unknown error');
             }
         }
     }, [lastMessage, currentJobId]);
@@ -516,7 +517,7 @@ export default function GeneratePage() {
 
         } catch (error: any) {
             console.error("Generation error:", error);
-            alert("Error: " + (error.message || "Something went wrong"));
+            enterpriseToast.error("Generation Error", error.message || "Something went wrong");
             setIsGenerating(false);
         }
     };
@@ -554,7 +555,7 @@ export default function GeneratePage() {
                 });
             } else {
                 await navigator.clipboard.writeText(generatedImage);
-                alert("Link copied to clipboard!");
+                enterpriseToast.success("Copied!", "Image link copied to clipboard");
             }
         } catch (error) {
             console.error("Share error:", error);
@@ -1153,7 +1154,7 @@ export default function GeneratePage() {
                             <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'white' }}>Preview</span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <button
-                                    onClick={() => alert("To delete this image, please use the trash icon in the 'Recent Generations' section below.")}
+                                    onClick={() => enterpriseToast.info("Tip", "Use the trash icon in 'Recent Generations' below to delete images.")}
                                     disabled={!generatedImage}
                                     style={{
                                         background: 'transparent',
@@ -1455,7 +1456,7 @@ function ActiveJobsList({ refreshKey }: { refreshKey: number }) {
             setJobs(prev => prev.filter(j => j.id !== jobId));
         } catch (e: any) {
             console.error(e);
-            alert(`Failed to cancel job: ${e.message}`);
+            enterpriseToast.error("Cancel Failed", e.message);
         }
     };
 
@@ -1470,7 +1471,7 @@ function ActiveJobsList({ refreshKey }: { refreshKey: number }) {
             setJobs([]);
         } catch (e: any) {
             console.error(e);
-            alert(`Failed to clear jobs: ${e.message}`);
+            enterpriseToast.error("Clear Failed", e.message);
         }
     };
 
@@ -1623,7 +1624,7 @@ function RecentGenerationsGrid({ refreshKey }: { refreshKey: number }) {
             console.error("Delete failed:", error);
             // Rollback optimistic update
             setRecent(previousRecent);
-            alert(`Delete failed: ${error.message}`);
+            enterpriseToast.error("Delete Failed", error.message);
         } finally {
             setDeletingId(assetId === deletingId ? null : deletingId);
         }

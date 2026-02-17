@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { enterpriseToast } from "@/components/ui/enterprise-toast";
 import {
     Sparkles,
     Settings2,
@@ -191,7 +192,7 @@ export default function GenerateVideoPage() {
                 } else if (update.status === 'failed') {
                     setIsGenerating(false);
                     setCurrentJobId(null);
-                    alert(`Video Generation Failed: ${update.error_message || 'Internal error'}`);
+                    enterpriseToast.error("Video Generation Failed", update.error_message || 'Internal error');
                 }
             }
         };
@@ -242,7 +243,7 @@ export default function GenerateVideoPage() {
                 setIsGenerating(false);
                 setProgress(0);
                 setCurrentJobId(null);
-                alert(`Production Failed: ${realtimeJobUpdate.error_message || 'Unknown error'}`);
+                enterpriseToast.error("Production Failed", realtimeJobUpdate.error_message || 'Unknown error');
             } else if (realtimeJobUpdate.current_node) {
                 const nodeLabel = !isNaN(Number(realtimeJobUpdate.current_node)) ? `Node ${realtimeJobUpdate.current_node}` : realtimeJobUpdate.current_node;
                 setStatusMessage(`Synthesis: ${nodeLabel} (${realtimeJobUpdate.progress}%)`);
@@ -432,7 +433,7 @@ export default function GenerateVideoPage() {
 
         } catch (error: any) {
             console.error("Generation error:", error);
-            alert("Error: " + (error.message || "Something went wrong"));
+            enterpriseToast.error("Generation Error", error.message || "Something went wrong");
             setIsGenerating(false);
         }
     }
@@ -466,7 +467,7 @@ export default function GenerateVideoPage() {
                 });
             } else {
                 await navigator.clipboard.writeText(generatedImage);
-                alert("Link copied to clipboard!");
+                enterpriseToast.success("Copied!", "Video link copied to clipboard");
             }
         } catch (error) {
             console.error("Share error:", error);
@@ -1234,7 +1235,7 @@ function RecentVideosGrid({ refreshKey }: { refreshKey: number }) {
             console.error("Archive Error:", error);
             // Rollback
             setVideos(previousVideos);
-            alert(`Failed to delete: ${error.message}`);
+            enterpriseToast.error("Delete Failed", error.message);
         } finally {
             setDeletingId(null);
         }

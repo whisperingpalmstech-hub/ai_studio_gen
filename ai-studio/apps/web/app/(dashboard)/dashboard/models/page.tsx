@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { enterpriseToast } from "@/components/ui/enterprise-toast";
 import {
     Search,
     Filter,
@@ -131,10 +132,10 @@ export default function ModelsPage() {
             setIsAddModalOpen(false);
             setNewModel({ name: "", type: "checkpoint", base_model: "sd15", file_path: "", description: "" });
             fetchModels();
-            alert("Model added successfully!");
+            enterpriseToast.success("Model Added", `"${newModel.name}" has been registered successfully`);
         } catch (err: any) {
             console.error("Error adding model:", err);
-            alert("Failed to add model: " + err.message);
+            enterpriseToast.error("Failed to Add Model", err.message);
         } finally {
             setIsSubmitting(false);
         }

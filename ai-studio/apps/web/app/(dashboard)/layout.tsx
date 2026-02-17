@@ -15,9 +15,12 @@ import {
     ChevronDown,
     Zap,
     Plus,
+    Menu,
+    X,
+    Code2,
+    BookOpen,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCredits } from "@/lib/hooks/use-credits";
 import { UpgradeModal } from "@/components/UpgradeModal";
 
@@ -28,13 +31,12 @@ const navigation = [
     { name: "Gallery", href: "/dashboard/gallery", icon: ImageIcon },
     { name: "Workflows", href: "/dashboard/workflows", icon: Layers },
     { name: "Models", href: "/dashboard/models", icon: FolderOpen },
+    { name: "API Docs", href: "/dashboard/api-docs", icon: Code2 },
 ];
 
 const bottomNavigation = [
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
-
-
 
 export default function DashboardLayout({
     children,
@@ -44,203 +46,380 @@ export default function DashboardLayout({
     const pathname = usePathname();
     const { credits, tier, loading, refresh } = useCredits();
     const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
 
-    const sidebarStyle: React.CSSProperties = {
-        position: 'fixed',
-        left: 0,
-        top: 0,
-        zIndex: 40,
-        height: '100vh',
-        width: '16rem',
-        borderRight: '1px solid rgba(255, 255, 255, 0.1)',
-        backgroundColor: 'rgba(15, 15, 35, 0.8)',
-        backdropFilter: 'blur(8px)',
-        display: 'flex',
-        flexDirection: 'column',
-    };
+    // Detect mobile viewport
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+        checkMobile();
+        window.addEventListener("resize", checkMobile);
+        return () => window.removeEventListener("resize", checkMobile);
+    }, []);
 
-    const logoStyle: React.CSSProperties = {
-        display: 'flex',
-        height: '4rem',
-        alignItems: 'center',
-        gap: '0.75rem',
-        padding: '0 1.5rem',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        color: 'white',
-        textDecoration: 'none',
-    };
+    // Close mobile menu on navigation
+    useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [pathname]);
 
     const getNavItemStyle = (isActive: boolean): React.CSSProperties => ({
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.75rem',
-        borderRadius: '0.5rem',
-        padding: '0.625rem 0.75rem',
-        fontSize: '0.875rem',
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        borderRadius: "0.625rem",
+        padding: "0.625rem 0.75rem",
+        fontSize: "0.875rem",
         fontWeight: 500,
-        textDecoration: 'none',
-        transition: 'all 0.2s ease',
-        backgroundColor: isActive ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
-        color: isActive ? '#818cf8' : '#9ca3af',
+        textDecoration: "none",
+        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+        backgroundColor: isActive ? "rgba(99, 102, 241, 0.12)" : "transparent",
+        color: isActive ? "#a5b4fc" : "#9ca3af",
+        borderLeft: isActive ? "3px solid #818cf8" : "3px solid transparent",
     });
 
-    const buttonStyle: React.CSSProperties = {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '100%',
-        padding: '0.625rem 1rem',
-        borderRadius: '0.5rem',
-        fontSize: '0.875rem',
-        fontWeight: 500,
-        cursor: 'pointer',
-        border: 'none',
-        background: 'linear-gradient(135deg, #6366f1, #a855f7)',
-        color: 'white',
-        boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)',
-    };
-
-    return (
-        <div style={{ minHeight: '100vh', display: 'flex', backgroundColor: 'hsl(222, 47%, 6%)' }}>
-            {/* Sidebar */}
-            <aside style={sidebarStyle}>
-                {/* Logo */}
-                <Link href="/" style={logoStyle}>
-                    <div style={{
-                        display: 'flex',
-                        height: '2.25rem',
-                        width: '2.25rem',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: '0.5rem',
-                        background: 'linear-gradient(135deg, #6366f1, #a855f7)'
-                    }}>
-                        <Sparkles style={{ width: '1.25rem', height: '1.25rem', color: 'white' }} />
+    const sidebarContent = (
+        <>
+            {/* Logo */}
+            <Link
+                href="/"
+                style={{
+                    display: "flex",
+                    height: "4rem",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    padding: "0 1.5rem",
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                    color: "white",
+                    textDecoration: "none",
+                }}
+            >
+                <div
+                    style={{
+                        display: "flex",
+                        height: "2.25rem",
+                        width: "2.25rem",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: "0.625rem",
+                        background: "linear-gradient(135deg, #6366f1, #a855f7)",
+                        boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
+                    }}
+                >
+                    <Sparkles style={{ width: "1.25rem", height: "1.25rem", color: "white" }} />
+                </div>
+                <div>
+                    <span style={{ fontSize: "1.125rem", fontWeight: 700, color: "white", letterSpacing: "-0.025em" }}>
+                        AI Studio
+                    </span>
+                    <div style={{ fontSize: "0.625rem", color: "#6b7280", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>
+                        Enterprise
                     </div>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white' }}>AI Studio</span>
+                </div>
+            </Link>
+
+            {/* Quick Action */}
+            <div style={{ padding: "1.25rem 1rem" }}>
+                <Link href="/dashboard/generate" style={{ textDecoration: "none" }}>
+                    <button
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "100%",
+                            padding: "0.75rem 1rem",
+                            borderRadius: "0.625rem",
+                            fontSize: "0.875rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            border: "none",
+                            background: "linear-gradient(135deg, #6366f1, #a855f7)",
+                            color: "white",
+                            boxShadow: "0 4px 16px rgba(99, 102, 241, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+                            transition: "all 0.2s ease",
+                            letterSpacing: "-0.01em",
+                        }}
+                    >
+                        <Plus style={{ marginRight: "0.5rem", width: "1rem", height: "1rem" }} />
+                        New Generation
+                    </button>
                 </Link>
+            </div>
 
-                {/* Quick Action */}
-                <div style={{ padding: '1.5rem' }}>
-                    <Link href="/dashboard/generate" style={{ textDecoration: 'none' }}>
-                        <button style={buttonStyle}>
-                            <Plus style={{ marginRight: '0.5rem', width: '1rem', height: '1rem' }} />
-                            New Generation
-                        </button>
-                    </Link>
+            {/* Main Navigation */}
+            <nav style={{ flex: 1, padding: "0 0.5rem", display: "flex", flexDirection: "column", gap: "0.125rem", overflowY: "auto" }}>
+                <div style={{ padding: "0 0.75rem 0.5rem", fontSize: "0.6875rem", fontWeight: 600, color: "#4b5563", textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>
+                    WORKSPACE
                 </div>
+                {navigation.slice(0, 6).map((item) => {
+                    const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+                    return (
+                        <Link key={item.name} href={item.href} style={getNavItemStyle(isActive)}>
+                            <item.icon style={{ width: "1.125rem", height: "1.125rem" }} />
+                            {item.name}
+                        </Link>
+                    );
+                })}
 
-                {/* Main Navigation */}
-                <nav style={{ flex: 1, padding: '0 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    {navigation.map((item) => {
-                        const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                        return (
-                            <Link
-                                key={item.name}
-                                href={item.href}
-                                style={getNavItemStyle(isActive)}
-                            >
-                                <item.icon style={{ width: '1.25rem', height: '1.25rem' }} />
-                                {item.name}
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                {/* Bottom Navigation */}
-                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    {bottomNavigation.map((item) => {
-                        const isActive = pathname === item.href;
-                        return (
-                            <Link
-                                key={item.name}
-                                href={item.href}
-                                style={getNavItemStyle(isActive)}
-                            >
-                                <item.icon style={{ width: '1.25rem', height: '1.25rem' }} />
-                                {item.name}
-                            </Link>
-                        );
-                    })}
+                <div style={{ padding: "1rem 0.75rem 0.5rem 0.75rem", fontSize: "0.6875rem", fontWeight: 600, color: "#4b5563", textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>
+                    DEVELOPER
                 </div>
+                {navigation.slice(6).map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                    return (
+                        <Link key={item.name} href={item.href} style={getNavItemStyle(isActive)}>
+                            <item.icon style={{ width: "1.125rem", height: "1.125rem" }} />
+                            {item.name}
+                        </Link>
+                    );
+                })}
+            </nav>
 
-                {/* Credits Card */}
-                <div style={{ padding: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                    <div style={{
-                        borderRadius: '0.75rem',
-                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1))',
-                        border: '1px solid rgba(99, 102, 241, 0.2)',
-                        padding: '1rem'
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                            <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Credits</span>
-                            <Zap style={{ width: '1rem', height: '1rem', color: '#6366f1' }} />
+            {/* Bottom Navigation */}
+            <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.06)", padding: "0.5rem", display: "flex", flexDirection: "column", gap: "0.125rem" }}>
+                {bottomNavigation.map((item) => {
+                    const isActive = pathname === item.href;
+                    return (
+                        <Link key={item.name} href={item.href} style={getNavItemStyle(isActive)}>
+                            <item.icon style={{ width: "1.125rem", height: "1.125rem" }} />
+                            {item.name}
+                        </Link>
+                    );
+                })}
+            </div>
+
+            {/* Credits Card */}
+            <div style={{ padding: "0.75rem", borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                <div
+                    style={{
+                        borderRadius: "0.75rem",
+                        background: "linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.08))",
+                        border: "1px solid rgba(99, 102, 241, 0.15)",
+                        padding: "1rem",
+                    }}
+                >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                        <span style={{ fontSize: "0.75rem", color: "#9ca3af", fontWeight: 500, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Credits</span>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "1.5rem", height: "1.5rem", borderRadius: "50%", background: "rgba(99, 102, 241, 0.2)" }}>
+                            <Zap style={{ width: "0.75rem", height: "0.75rem", color: "#818cf8" }} />
                         </div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.25rem', color: 'white' }}>
-                            {loading ? '...' : credits}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.75rem' }}>
-                            {tier === 'pro' ? 'Pro Plan • 1000/mo' : 'Free tier • Resets monthly'}
-                        </div>
-                        <button
-                            onClick={() => setIsUpgradeOpen(true)}
-                            style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '0.5rem',
-                                padding: '0.5rem',
-                                fontSize: '0.75rem',
-                                color: 'white',
-                                background: 'transparent',
-                                border: '1px solid rgba(255, 255, 255, 0.2)',
-                                borderRadius: '0.375rem',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            <CreditCard style={{ width: '0.75rem', height: '0.75rem' }} />
-                            {tier === 'pro' ? 'Manage Plan' : 'Upgrade Plan'}
-                        </button>
                     </div>
-                </div>
-
-                {/* User Menu */}
-                <div style={{ padding: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                    <button style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.625rem 0.75rem',
-                        borderRadius: '0.5rem',
-                        border: 'none',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                    }}>
-                        <div style={{
-                            height: '2rem',
-                            width: '2rem',
-                            borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #818cf8, #a855f7)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}>
-                            <User style={{ width: '1rem', height: '1rem', color: 'white' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'white' }}>User</div>
-                            <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{tier === 'pro' ? 'Pro' : 'Free'}</div>
-                        </div>
-                        <ChevronDown style={{ width: '1rem', height: '1rem', color: '#9ca3af' }} />
+                    <div style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.125rem", color: "white", letterSpacing: "-0.025em" }}>
+                        {loading ? (
+                            <span style={{ display: "inline-block", width: "3rem", height: "1.5rem", background: "rgba(255,255,255,0.05)", borderRadius: "0.375rem", animation: "pulse 2s infinite" }} />
+                        ) : (
+                            credits?.toLocaleString() ?? "0"
+                        )}
+                    </div>
+                    <div style={{ fontSize: "0.6875rem", color: "#6b7280", marginBottom: "0.75rem" }}>
+                        {tier === "pro" ? "Pro Plan • 1,000/mo" : tier === "enterprise" ? "Enterprise • Unlimited" : "Free tier • 100/mo"}
+                    </div>
+                    {/* Credit bar */}
+                    <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px", marginBottom: "0.75rem", overflow: "hidden" }}>
+                        <div
+                            style={{
+                                height: "100%",
+                                width: `${Math.min(((credits || 0) / (tier === "pro" ? 1000 : 100)) * 100, 100)}%`,
+                                background: "linear-gradient(90deg, #6366f1, #a855f7)",
+                                borderRadius: "2px",
+                                transition: "width 0.5s ease",
+                            }}
+                        />
+                    </div>
+                    <button
+                        onClick={() => setIsUpgradeOpen(true)}
+                        style={{
+                            width: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "0.375rem",
+                            padding: "0.5rem",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            color: "#a5b4fc",
+                            background: "rgba(99, 102, 241, 0.1)",
+                            border: "1px solid rgba(99, 102, 241, 0.2)",
+                            borderRadius: "0.5rem",
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                        }}
+                    >
+                        <CreditCard style={{ width: "0.75rem", height: "0.75rem" }} />
+                        {tier === "pro" ? "Manage Plan" : "Upgrade Plan"}
                     </button>
                 </div>
+            </div>
+
+            {/* User Menu */}
+            <div style={{ padding: "0.75rem", borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                <button
+                    style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                        padding: "0.5rem 0.625rem",
+                        borderRadius: "0.625rem",
+                        border: "none",
+                        background: "transparent",
+                        cursor: "pointer",
+                        textAlign: "left" as const,
+                        transition: "all 0.2s ease",
+                    }}
+                >
+                    <div
+                        style={{
+                            height: "2rem",
+                            width: "2rem",
+                            borderRadius: "50%",
+                            background: "linear-gradient(135deg, #818cf8, #a855f7)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            boxShadow: "0 2px 8px rgba(129, 140, 248, 0.3)",
+                        }}
+                    >
+                        <User style={{ width: "0.875rem", height: "0.875rem", color: "white" }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "white" }}>User</div>
+                        <div style={{ fontSize: "0.6875rem", color: "#6b7280" }}>
+                            {tier === "pro" ? "Pro" : tier === "enterprise" ? "Enterprise" : "Free"}
+                        </div>
+                    </div>
+                    <ChevronDown style={{ width: "0.875rem", height: "0.875rem", color: "#6b7280" }} />
+                </button>
+            </div>
+        </>
+    );
+
+    return (
+        <div style={{ minHeight: "100vh", display: "flex", backgroundColor: "hsl(222, 47%, 6%)" }}>
+            {/* Mobile Header */}
+            {isMobile && (
+                <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        height: "3.5rem",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "0 1rem",
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                        backgroundColor: "rgba(15, 15, 35, 0.95)",
+                        backdropFilter: "blur(12px)",
+                    }}
+                >
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <div
+                            style={{
+                                display: "flex",
+                                height: "1.75rem",
+                                width: "1.75rem",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderRadius: "0.5rem",
+                                background: "linear-gradient(135deg, #6366f1, #a855f7)",
+                            }}
+                        >
+                            <Sparkles style={{ width: "1rem", height: "1rem", color: "white" }} />
+                        </div>
+                        <span style={{ fontSize: "1rem", fontWeight: 700, color: "white" }}>AI Studio</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                        {/* Mobile credit badge */}
+                        <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.375rem",
+                            padding: "0.25rem 0.625rem",
+                            borderRadius: "1rem",
+                            background: "rgba(99, 102, 241, 0.1)",
+                            border: "1px solid rgba(99, 102, 241, 0.2)",
+                        }}>
+                            <Zap style={{ width: "0.75rem", height: "0.75rem", color: "#818cf8" }} />
+                            <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#a5b4fc" }}>
+                                {loading ? "..." : credits?.toLocaleString() ?? "0"}
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "2.25rem",
+                                height: "2.25rem",
+                                borderRadius: "0.5rem",
+                                background: "rgba(255, 255, 255, 0.05)",
+                                border: "1px solid rgba(255, 255, 255, 0.1)",
+                                color: "white",
+                                cursor: "pointer",
+                            }}
+                        >
+                            {isMobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Mobile Menu Overlay */}
+            {isMobile && isMobileMenuOpen && (
+                <div
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 45,
+                        backgroundColor: "rgba(0, 0, 0, 0.6)",
+                        backdropFilter: "blur(4px)",
+                    }}
+                />
+            )}
+
+            {/* Sidebar - Desktop: fixed | Mobile: slide-over */}
+            <aside
+                style={{
+                    position: "fixed",
+                    left: 0,
+                    top: isMobile ? "3.5rem" : 0,
+                    zIndex: isMobile ? 50 : 40,
+                    height: isMobile ? "calc(100vh - 3.5rem)" : "100vh",
+                    width: "16rem",
+                    borderRight: "1px solid rgba(255, 255, 255, 0.06)",
+                    backgroundColor: "rgba(12, 12, 30, 0.97)",
+                    backdropFilter: "blur(12px)",
+                    display: "flex",
+                    flexDirection: "column",
+                    transform: isMobile
+                        ? isMobileMenuOpen
+                            ? "translateX(0)"
+                            : "translateX(-100%)"
+                        : "translateX(0)",
+                    transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                    overflowY: "auto",
+                }}
+            >
+                {sidebarContent}
             </aside>
 
             {/* Main Content */}
-            <main style={{ flex: 1, marginLeft: '16rem', padding: '2rem' }}>
+            <main
+                style={{
+                    flex: 1,
+                    marginLeft: isMobile ? 0 : "16rem",
+                    paddingTop: isMobile ? "4.5rem" : "1.5rem",
+                    paddingLeft: isMobile ? "1rem" : "2rem",
+                    paddingRight: isMobile ? "1rem" : "2rem",
+                    paddingBottom: "2rem",
+                    minHeight: "100vh",
+                    transition: "margin-left 0.3s ease",
+                }}
+            >
                 {children}
             </main>
 

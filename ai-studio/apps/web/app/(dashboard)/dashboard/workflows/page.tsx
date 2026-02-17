@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { enterpriseToast } from "@/components/ui/enterprise-toast";
 import { Plus, Play, Trash2, Edit, Loader2, Calendar, Link as LinkIcon, Zap, Layout, Brush, History, Layers } from "lucide-react";
 import { WORKFLOW_TEMPLATES } from "@/lib/workflow-templates";
 
@@ -56,11 +57,11 @@ export default function WorkflowsPage() {
             if (response.ok) {
                 setWorkflows((prev) => prev.filter((w) => w.id !== id));
             } else {
-                alert("Failed to delete workflow");
+                enterpriseToast.error("Delete Failed", "Failed to delete workflow");
             }
         } catch (error) {
             console.error("Delete error:", error);
-            alert("An error occurred while deleting");
+            enterpriseToast.error("Error", "An error occurred while deleting");
         } finally {
             setDeletingId(null);
         }
@@ -86,11 +87,11 @@ export default function WorkflowsPage() {
                 const data = await response.json();
                 router.push(`/dashboard/workflows/editor?id=${data.workflow.id}`);
             } else {
-                alert("Failed to create workflow from template");
+                enterpriseToast.error("Template Error", "Failed to create workflow from template");
             }
         } catch (error) {
             console.error("Template error:", error);
-            alert("An error occurred");
+            enterpriseToast.error("Error", "An error occurred");
         } finally {
             setCreatingTemplate(null);
         }
