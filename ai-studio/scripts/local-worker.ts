@@ -35,7 +35,36 @@ const STUCK_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 // Handles ALL possible user scenarios: clothing, face, hair, background,
 // accessories, shoes, tattoos, makeup, body mods, color-only changes,
 // remove/add actions, and multi-region combinations.
-// No API calls needed — fast, free, deterministic.
+// Helper to strip instructional keywords from prompt (SDXL prefers descriptions, not commands)
+function cleanPrompt(text: string): string {
+    let p = text.toLowerCase();
+    const cleanups = [
+        /^change\s+(?:the\s+)?/i,
+        /^make\s+(?:the\s+)?/i,
+        /^add\s+(?:a\s+|an\s+)?/i,
+        /^remove\s+(?:the\s+)?/i,
+        /^replace\s+(?:the\s+)?/i,
+        /^wear(?:ing)?\s+(?:a\s+|an\s+)?/i,
+        /^put\s+on\s+(?:a\s+|an\s+)?/i,
+        /\s+to\s+(?:a\s+|an\s+)?/i,
+        /\s+on\s+(?:the\s+)?persona/i,
+        /\s+for\s+(?:the\s+)?person/i,
+    ];
+    let cleaned = text;
+    // We want to keep the core nouns but remove the "Change to" prefix
+    if (p.startsWith('change ') || p.startsWith('make ') || p.startsWith('add ') || p.startsWith('replace ')) {
+        const parts = text.split(/\s+to\s+/i);
+        if (parts.length > 1) {
+            // "change my shirt to a red dress" -> "red dress"
+            cleaned = parts[parts.length - 1];
+        } else {
+            // "change dress" -> "dress"
+            cleaned = text.replace(/^(change|make|add|replace|remove)\s+(?:the\s+|a\s+|an\s+)?/i, '');
+        }
+    }
+    return cleaned.trim();
+}
+
 interface InpaintAnalysis {
     dinoPrompt: string;       // What GroundingDINO should detect in the image
     denoise: number;          // Auto-tuned denoise strength
@@ -49,6 +78,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
     const prompt = userPrompt.toLowerCase();
 
     // ============ COMPREHENSIVE KEYWORD MAPS ============
+    // CRITICAL: GroundingDINO works with SIMPLE NOUNS only!
+    // "person", "clothes", "shirt", "face" = GOOD
+    // "upper body clothing", "torso clothing" = BAD (DINO can't detect these)
     const REGIONS: Record<string, {
         keywords: string[];
         dinoParts: string[];
@@ -61,9 +93,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
             keywords: ['shirt', 't-shirt', 'tshirt', 'blouse', 'top', 'sweater', 'hoodie', 'jacket', 'coat',
                 'vest', 'kurta', 'polo', 'tank top', 'crop top', 'cardigan', 'blazer', 'sweatshirt',
                 'jersey', 'tunic', 'pullover', 'windbreaker', 'parka', 'fleece'],
-            dinoParts: ['upper body clothing', 'shirt', 'top', 'torso'],
-            denoise: 0.6,
-            threshold: 0.35,
+            dinoParts: ['person', 'clothes'],
+            denoise: 0.65,
+            threshold: 0.15,
             dilation: 20,
             negatives: 'wrong neckline, mismatched sleeves'
         },
@@ -71,9 +103,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
             keywords: ['jeans', 'pants', 'trousers', 'shorts', 'skirt', 'leggings', 'salwar', 'pajama',
                 'chinos', 'joggers', 'cargo pants', 'culottes', 'palazzo', 'flares', 'capri',
                 'bermuda', 'sweatpants', 'track pants', 'dhoti'],
-            dinoParts: ['lower body clothing', 'pants', 'legs'],
-            denoise: 0.6,
-            threshold: 0.35,
+            dinoParts: ['person', 'clothes'],
+            denoise: 0.65,
+            threshold: 0.15,
             dilation: 20,
             negatives: 'wrong leg shape'
         },
@@ -83,9 +115,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'casual', 'formal', 'modern', 'ethnic', 'uniform', 'costume', 'apparel',
                 'wardrobe', 'frock', 'anarkali', 'churidar', 'sharara', 'ghagra', 'kaftan',
                 'abaya', 'kimono', 'hanbok', 'overalls', 'bodysuit', 'onesie'],
-            dinoParts: ['clothes', 'dress', 'outfit', 'clothing', 'full body clothing'],
-            denoise: 0.65,
-            threshold: 0.35,
+            dinoParts: ['person', 'clothes', 'dress'],
+            denoise: 0.7,
+            threshold: 0.15,
             dilation: 25,
             negatives: 'previous clothing visible, mixed outfit styles, old garment showing'
         },
@@ -93,9 +125,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
             keywords: ['shoes', 'sneakers', 'boots', 'heels', 'sandals', 'slippers', 'loafers', 'flats',
                 'stilettos', 'wedges', 'moccasins', 'oxfords', 'pumps', 'flip flops', 'crocs',
                 'trainers', 'footwear', 'chappal', 'juttis', 'kolhapuri'],
-            dinoParts: ['shoes', 'footwear', 'feet'],
+            dinoParts: ['shoes', 'feet'],
             denoise: 0.55,
-            threshold: 0.35,
+            threshold: 0.2,
             dilation: 15,
             negatives: 'mismatched shoes, floating feet'
         },
@@ -104,9 +136,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'complexion', 'skin tone', 'freckles', 'wrinkles', 'beard', 'mustache',
                 'moustache', 'clean shaven', 'goatee', 'sideburns', 'eyebrows', 'forehead',
                 'chin', 'jaw', 'dimples', 'look older', 'look younger', 'aging', 'youthful'],
-            dinoParts: ['face', 'head'],
+            dinoParts: ['face'],
             denoise: 0.45,
-            threshold: 0.4,
+            threshold: 0.25,
             dilation: 10,
             negatives: 'different person, changed identity, distorted face, asymmetric face, unnatural skin'
         },
@@ -114,9 +146,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
             keywords: ['makeup', 'lipstick', 'eyeliner', 'eyeshadow', 'mascara', 'foundation',
                 'blush', 'bronzer', 'highlighter', 'contour', 'gloss', 'cosmetic',
                 'no makeup', 'natural look', 'glam', 'bridal makeup', 'party makeup'],
-            dinoParts: ['face', 'head'],
+            dinoParts: ['face'],
             denoise: 0.4,
-            threshold: 0.4,
+            threshold: 0.25,
             dilation: 8,
             negatives: 'smeared makeup, uneven skin, unnatural colors on face'
         },
@@ -126,9 +158,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'afro', 'bob', 'pixie', 'bangs', 'fringe', 'highlights', 'ombre',
                 'hair color', 'hair length', 'long hair', 'short hair', 'mohawk',
                 'undercut', 'fade', 'crew cut', 'cornrows', 'pigtails', 'updo'],
-            dinoParts: ['hair', 'head', 'hairstyle'],
+            dinoParts: ['hair', 'head'],
             denoise: 0.55,
-            threshold: 0.35,
+            threshold: 0.2,
             dilation: 15,
             negatives: 'bald patches, uneven hair, hair artifacts, wig-like'
         },
@@ -141,9 +173,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'mars', 'moon', 'underwater', 'snow', 'rain', 'desert', 'jungle',
                 'field', 'meadow', 'river', 'lake', 'waterfall', 'bridge', 'rooftop',
                 'balcony', 'terrace', 'corridor', 'hallway', 'staircase'],
-            dinoParts: ['background', 'wall', 'scenery', 'environment'],
+            dinoParts: ['wall', 'background', 'floor'],
             denoise: 0.75,
-            threshold: 0.25,
+            threshold: 0.15,
             dilation: 30,
             negatives: 'person changed, different face, different body, body deformed'
         },
@@ -155,9 +187,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'headband', 'tiara', 'crown', 'veil', 'turban', 'pagri', 'stole',
                 'shawl', 'gloves', 'mittens', 'umbrella', 'cane', 'walking stick',
                 'headphones', 'airpods', 'mask', 'face mask'],
-            dinoParts: ['accessories', 'jewelry', 'glasses', 'hat', 'necklace'],
+            dinoParts: ['glasses', 'jewelry', 'hat', 'necklace'],
             denoise: 0.5,
-            threshold: 0.3,
+            threshold: 0.2,
             dilation: 12,
             negatives: 'floating accessories, misplaced items, wrong size'
         },
@@ -166,7 +198,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'body paint', 'face paint', 'tribal', 'sleeve tattoo'],
             dinoParts: ['arm', 'skin', 'body'],
             denoise: 0.45,
-            threshold: 0.3,
+            threshold: 0.2,
             dilation: 10,
             negatives: 'blurred lines, smeared ink, unnatural skin texture'
         },
@@ -175,9 +207,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'bulky', 'lean', 'fit', 'body shape', 'physique', 'body type', 'arms',
                 'biceps', 'abs', 'chest', 'shoulders', 'neck', 'hands', 'fingers',
                 'pregnant', 'belly'],
-            dinoParts: ['body', 'torso', 'person', 'human body'],
+            dinoParts: ['person', 'body'],
             denoise: 0.55,
-            threshold: 0.3,
+            threshold: 0.15,
             dilation: 20,
             negatives: 'extra limbs, wrong proportions, distorted body, unnatural pose'
         },
@@ -189,9 +221,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'pen', 'laptop', 'tablet', 'controller', 'microphone', 'candle',
                 'gift', 'present', 'baby', 'child', 'cat', 'dog', 'pet',
                 'briefcase', 'suitcase', 'luggage'],
-            dinoParts: ['hands', 'object', 'hand held item'],
+            dinoParts: ['hand', 'object'],
             denoise: 0.55,
-            threshold: 0.3,
+            threshold: 0.2,
             dilation: 15,
             negatives: 'floating object, wrong grip, extra fingers, fused object'
         }
@@ -256,6 +288,18 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         }
     }
 
+    // "From X to Y" patterns — very common! "change shirt to dress"
+    const fromToPattern = /change\s+(?:the\s+)?(\w+)\s+to\s+(?:a\s+|an\s+)?(.+)/i;
+    const fromToMatch = userPrompt.match(fromToPattern);
+    if (fromToMatch) {
+        const oldItem = fromToMatch[1];
+        const newItem = fromToMatch[2];
+        console.log(`🔄 From/To pattern: ${oldItem} -> ${newItem}`);
+        allDinoParts.push(oldItem); // Detect the OLD item to mask it
+        allNegatives.push(oldItem); // Add OLD item to negative to remove traces
+        if (!matchedRegions.includes('swap_item')) matchedRegions.push('swap_item');
+    }
+
     // "Add X" patterns  
     const addPatterns = [
         /add\s+(?:a\s+|an\s+)?(\w+)/,
@@ -279,12 +323,12 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
 
     // If nothing matched at all → smart fallback
     if (matchedRegions.length === 0) {
-        console.log('⚠️ No specific region detected in prompt, defaulting to clothing detection');
-        allDinoParts = ['clothes', 'outfit', 'dress', 'clothing', 'full body clothing'];
+        console.log('⚠️ No specific region detected in prompt, defaulting to person/clothing detection');
+        allDinoParts = ['person', 'clothes'];
         maxDenoise = 0.6;
         maxDilation = 22;
-        minThreshold = 0.35;
-        matchedRegions.push('general_clothing');
+        minThreshold = 0.15;
+        matchedRegions.push('general_detection');
     }
 
     // Multi-region adjustments
@@ -1018,6 +1062,8 @@ const generateSimpleWorkflow = (params: any) => {
         const comfySampler = samplerMap[params.sampler] || "dpmpp_2m";
         const scheduler = (params.sampler || '').includes('Karras') ? 'karras' : 'normal';
 
+        const cleanedPositive = cleanPrompt(params.prompt || "");
+
         workflow[ID_AI.CHECKPOINT] = {
             class_type: "CheckpointLoaderSimple",
             inputs: { ckpt_name: ckptName }
@@ -1025,7 +1071,7 @@ const generateSimpleWorkflow = (params: any) => {
 
         workflow[ID_AI.PROMPT_POS] = {
             class_type: "CLIPTextEncode",
-            inputs: { text: params.prompt || "", clip: [ID_AI.CHECKPOINT, 1] }
+            inputs: { text: cleanedPositive, clip: [ID_AI.CHECKPOINT, 1] }
         };
 
         workflow[ID_AI.PROMPT_NEG] = {
