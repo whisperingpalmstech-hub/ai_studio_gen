@@ -1510,7 +1510,6 @@ export default function GeneratePage() {
                 <RecentGenerationsGrid refreshKey={refreshKey} />
             </div>
         </div>
-        </div >
     );
 }
 
