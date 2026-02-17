@@ -31,6 +31,300 @@ console.log(`📍 ComfyUI Input: ${COMFYUI_INPUT_DIR}`);
 
 const STUCK_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
+// ========== SMART INPAINT PROMPT ANALYZER (v2 — Universal) ==========
+// Handles ALL possible user scenarios: clothing, face, hair, background,
+// accessories, shoes, tattoos, makeup, body mods, color-only changes,
+// remove/add actions, and multi-region combinations.
+// No API calls needed — fast, free, deterministic.
+interface InpaintAnalysis {
+    dinoPrompt: string;       // What GroundingDINO should detect in the image
+    denoise: number;          // Auto-tuned denoise strength
+    dinoThreshold: number;    // DINO confidence threshold
+    maskDilation: number;     // How much to expand the mask
+    negativeAdditions: string; // Auto-added negative prompt terms
+    changeType: string;       // For logging (comma-separated if multiple)
+}
+
+function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): InpaintAnalysis {
+    const prompt = userPrompt.toLowerCase();
+
+    // ============ COMPREHENSIVE KEYWORD MAPS ============
+    const REGIONS: Record<string, {
+        keywords: string[];
+        dinoParts: string[];
+        denoise: number;
+        threshold: number;
+        dilation: number;
+        negatives: string;
+    }> = {
+        upper_clothing: {
+            keywords: ['shirt', 't-shirt', 'tshirt', 'blouse', 'top', 'sweater', 'hoodie', 'jacket', 'coat',
+                'vest', 'kurta', 'polo', 'tank top', 'crop top', 'cardigan', 'blazer', 'sweatshirt',
+                'jersey', 'tunic', 'pullover', 'windbreaker', 'parka', 'fleece'],
+            dinoParts: ['upper body clothing', 'shirt', 'top', 'torso'],
+            denoise: 0.6,
+            threshold: 0.35,
+            dilation: 20,
+            negatives: 'wrong neckline, mismatched sleeves'
+        },
+        lower_clothing: {
+            keywords: ['jeans', 'pants', 'trousers', 'shorts', 'skirt', 'leggings', 'salwar', 'pajama',
+                'chinos', 'joggers', 'cargo pants', 'culottes', 'palazzo', 'flares', 'capri',
+                'bermuda', 'sweatpants', 'track pants', 'dhoti'],
+            dinoParts: ['lower body clothing', 'pants', 'legs'],
+            denoise: 0.6,
+            threshold: 0.35,
+            dilation: 20,
+            negatives: 'wrong leg shape'
+        },
+        full_clothing: {
+            keywords: ['dress', 'saree', 'sari', 'gown', 'jumpsuit', 'romper', 'lehenga', 'suit', 'outfit',
+                'clothes', 'clothing', 'wear', 'attire', 'garment', 'western', 'traditional',
+                'casual', 'formal', 'modern', 'ethnic', 'uniform', 'costume', 'apparel',
+                'wardrobe', 'frock', 'anarkali', 'churidar', 'sharara', 'ghagra', 'kaftan',
+                'abaya', 'kimono', 'hanbok', 'overalls', 'bodysuit', 'onesie'],
+            dinoParts: ['clothes', 'dress', 'outfit', 'clothing', 'full body clothing'],
+            denoise: 0.65,
+            threshold: 0.35,
+            dilation: 25,
+            negatives: 'previous clothing visible, mixed outfit styles, old garment showing'
+        },
+        shoes: {
+            keywords: ['shoes', 'sneakers', 'boots', 'heels', 'sandals', 'slippers', 'loafers', 'flats',
+                'stilettos', 'wedges', 'moccasins', 'oxfords', 'pumps', 'flip flops', 'crocs',
+                'trainers', 'footwear', 'chappal', 'juttis', 'kolhapuri'],
+            dinoParts: ['shoes', 'footwear', 'feet'],
+            denoise: 0.55,
+            threshold: 0.35,
+            dilation: 15,
+            negatives: 'mismatched shoes, floating feet'
+        },
+        face: {
+            keywords: ['face', 'expression', 'smile', 'frown', 'eyes', 'nose', 'lips', 'cheeks',
+                'complexion', 'skin tone', 'freckles', 'wrinkles', 'beard', 'mustache',
+                'moustache', 'clean shaven', 'goatee', 'sideburns', 'eyebrows', 'forehead',
+                'chin', 'jaw', 'dimples', 'look older', 'look younger', 'aging', 'youthful'],
+            dinoParts: ['face', 'head'],
+            denoise: 0.45,
+            threshold: 0.4,
+            dilation: 10,
+            negatives: 'different person, changed identity, distorted face, asymmetric face, unnatural skin'
+        },
+        makeup: {
+            keywords: ['makeup', 'lipstick', 'eyeliner', 'eyeshadow', 'mascara', 'foundation',
+                'blush', 'bronzer', 'highlighter', 'contour', 'gloss', 'cosmetic',
+                'no makeup', 'natural look', 'glam', 'bridal makeup', 'party makeup'],
+            dinoParts: ['face', 'head'],
+            denoise: 0.4,
+            threshold: 0.4,
+            dilation: 8,
+            negatives: 'smeared makeup, uneven skin, unnatural colors on face'
+        },
+        hair: {
+            keywords: ['hair', 'hairstyle', 'haircut', 'bald', 'blonde', 'brunette', 'redhead',
+                'curly', 'straight', 'wavy', 'ponytail', 'bun', 'braids', 'dreadlocks',
+                'afro', 'bob', 'pixie', 'bangs', 'fringe', 'highlights', 'ombre',
+                'hair color', 'hair length', 'long hair', 'short hair', 'mohawk',
+                'undercut', 'fade', 'crew cut', 'cornrows', 'pigtails', 'updo'],
+            dinoParts: ['hair', 'head', 'hairstyle'],
+            denoise: 0.55,
+            threshold: 0.35,
+            dilation: 15,
+            negatives: 'bald patches, uneven hair, hair artifacts, wig-like'
+        },
+        background: {
+            keywords: ['background', 'scenery', 'room', 'outdoor', 'indoor', 'garden', 'beach',
+                'city', 'studio', 'wall', 'setting', 'location', 'environment', 'scene',
+                'landscape', 'sky', 'forest', 'mountain', 'ocean', 'sunset', 'sunrise',
+                'night', 'park', 'street', 'office', 'home', 'cafe', 'restaurant',
+                'palace', 'temple', 'church', 'library', 'gym', 'pool', 'space',
+                'mars', 'moon', 'underwater', 'snow', 'rain', 'desert', 'jungle',
+                'field', 'meadow', 'river', 'lake', 'waterfall', 'bridge', 'rooftop',
+                'balcony', 'terrace', 'corridor', 'hallway', 'staircase'],
+            dinoParts: ['background', 'wall', 'scenery', 'environment'],
+            denoise: 0.75,
+            threshold: 0.25,
+            dilation: 30,
+            negatives: 'person changed, different face, different body, body deformed'
+        },
+        accessories: {
+            keywords: ['glasses', 'sunglasses', 'spectacles', 'jewelry', 'jewellery', 'necklace',
+                'earring', 'earrings', 'watch', 'hat', 'cap', 'bindi', 'bangles',
+                'scarf', 'dupatta', 'tie', 'bow tie', 'belt', 'bag', 'purse', 'handbag',
+                'backpack', 'bracelet', 'ring', 'pendant', 'chain', 'choker', 'anklet',
+                'headband', 'tiara', 'crown', 'veil', 'turban', 'pagri', 'stole',
+                'shawl', 'gloves', 'mittens', 'umbrella', 'cane', 'walking stick',
+                'headphones', 'airpods', 'mask', 'face mask'],
+            dinoParts: ['accessories', 'jewelry', 'glasses', 'hat', 'necklace'],
+            denoise: 0.5,
+            threshold: 0.3,
+            dilation: 12,
+            negatives: 'floating accessories, misplaced items, wrong size'
+        },
+        tattoo: {
+            keywords: ['tattoo', 'tattoos', 'body art', 'ink', 'henna', 'mehndi', 'mehendi',
+                'body paint', 'face paint', 'tribal', 'sleeve tattoo'],
+            dinoParts: ['arm', 'skin', 'body'],
+            denoise: 0.45,
+            threshold: 0.3,
+            dilation: 10,
+            negatives: 'blurred lines, smeared ink, unnatural skin texture'
+        },
+        body: {
+            keywords: ['muscular', 'slim', 'thin', 'fat', 'athletic', 'toned', 'buff', 'skinny',
+                'bulky', 'lean', 'fit', 'body shape', 'physique', 'body type', 'arms',
+                'biceps', 'abs', 'chest', 'shoulders', 'neck', 'hands', 'fingers',
+                'pregnant', 'belly'],
+            dinoParts: ['body', 'torso', 'person', 'human body'],
+            denoise: 0.55,
+            threshold: 0.3,
+            dilation: 20,
+            negatives: 'extra limbs, wrong proportions, distorted body, unnatural pose'
+        },
+        object_in_hand: {
+            keywords: ['holding', 'carry', 'carrying', 'phone', 'mobile', 'cup', 'coffee',
+                'book', 'flower', 'flowers', 'bouquet', 'sword', 'weapon', 'guitar',
+                'camera', 'bottle', 'glass', 'wine', 'food', 'plate', 'trophy',
+                'ball', 'bat', 'racket', 'flag', 'sign', 'placard', 'paper',
+                'pen', 'laptop', 'tablet', 'controller', 'microphone', 'candle',
+                'gift', 'present', 'baby', 'child', 'cat', 'dog', 'pet',
+                'briefcase', 'suitcase', 'luggage'],
+            dinoParts: ['hands', 'object', 'hand held item'],
+            denoise: 0.55,
+            threshold: 0.3,
+            dilation: 15,
+            negatives: 'floating object, wrong grip, extra fingers, fused object'
+        }
+    };
+
+    // ============ DETECT ALL MATCHING REGIONS ============
+    const matchedRegions: string[] = [];
+    let allDinoParts: string[] = [];
+    let maxDenoise = 0;
+    let maxDilation = 0;
+    let minThreshold = 1.0;
+    let allNegatives: string[] = ['bad anatomy, deformed, distorted, disfigured, extra limbs, blurry, artifacts, low quality'];
+
+    for (const [regionName, config] of Object.entries(REGIONS)) {
+        const matched = config.keywords.some(k => prompt.includes(k));
+        if (matched) {
+            matchedRegions.push(regionName);
+            allDinoParts.push(...config.dinoParts);
+            maxDenoise = Math.max(maxDenoise, config.denoise);
+            maxDilation = Math.max(maxDilation, config.dilation);
+            minThreshold = Math.min(minThreshold, config.threshold);
+            allNegatives.push(config.negatives);
+        }
+    }
+
+    // ============ SPECIAL PATTERN DETECTION ============
+
+    // "Remove X" / "without X" / "no X" patterns — mask the item to remove
+    const removePatterns = [
+        /remov(?:e|ing)\s+(?:the\s+)?(\w+)/,
+        /without\s+(?:the\s+)?(\w+)/,
+        /no\s+(\w+)/,
+        /take\s+off\s+(?:the\s+)?(\w+)/,
+        /get\s+rid\s+of\s+(?:the\s+)?(\w+)/
+    ];
+    for (const pattern of removePatterns) {
+        const match = prompt.match(pattern);
+        if (match) {
+            const item = match[1];
+            // Map the item to remove to a DINO detection term
+            allDinoParts.push(item);
+            if (!matchedRegions.includes('remove_item')) {
+                matchedRegions.push('remove_item');
+                maxDenoise = Math.max(maxDenoise, 0.6);
+                maxDilation = Math.max(maxDilation, 15);
+            }
+        }
+    }
+
+    // "Change color" / "make it red" / "turn blue" patterns
+    const colorPatterns = [
+        /(?:change|make|turn|paint|dye|color|colour)\s+(?:it\s+|to\s+)?(?:the\s+)?(red|blue|green|yellow|pink|purple|white|black|brown|orange|grey|gray|golden|silver|navy|maroon|teal|cyan|magenta|beige|cream|ivory|lavender|turquoise|coral|salmon|olive|burgundy|indigo|violet|emerald|rose|peach|mint)/,
+    ];
+    for (const pattern of colorPatterns) {
+        const match = prompt.match(pattern);
+        if (match && matchedRegions.length === 0) {
+            // Color-only change with no specific region → default to clothes
+            matchedRegions.push('color_change');
+            allDinoParts.push('clothes', 'outfit', 'clothing');
+            maxDenoise = Math.max(maxDenoise, 0.55);
+            maxDilation = Math.max(maxDilation, 20);
+        }
+    }
+
+    // "Add X" patterns  
+    const addPatterns = [
+        /add\s+(?:a\s+|an\s+)?(\w+)/,
+        /put\s+(?:on\s+)?(?:a\s+|an\s+)?(\w+)/,
+        /wear(?:ing)?\s+(?:a\s+|an\s+)?(\w+)/,
+        /give\s+(?:her|him|them)\s+(?:a\s+|an\s+)?(\w+)/
+    ];
+    for (const pattern of addPatterns) {
+        const match = prompt.match(pattern);
+        if (match && matchedRegions.length === 0) {
+            const item = match[1];
+            // Try to figure out what region the added item belongs to  
+            allDinoParts.push(item, 'person');
+            matchedRegions.push('add_item');
+            maxDenoise = Math.max(maxDenoise, 0.55);
+            maxDilation = Math.max(maxDilation, 15);
+        }
+    }
+
+    // ============ CALCULATE FINAL VALUES ============
+
+    // If nothing matched at all → smart fallback
+    if (matchedRegions.length === 0) {
+        console.log('⚠️ No specific region detected in prompt, defaulting to clothing detection');
+        allDinoParts = ['clothes', 'outfit', 'dress', 'clothing', 'full body clothing'];
+        maxDenoise = 0.6;
+        maxDilation = 22;
+        minThreshold = 0.35;
+        matchedRegions.push('general_clothing');
+    }
+
+    // Multi-region adjustments
+    if (matchedRegions.length > 1) {
+        // Multiple regions changing → slightly higher denoise for coherence
+        maxDenoise = Math.min(maxDenoise + 0.05, 0.8);
+        // Larger dilation for smoother blending between regions
+        maxDilation = Math.min(maxDilation + 5, 35);
+        console.log(`🔀 Multi-region change detected: ${matchedRegions.join(' + ')}`);
+    }
+
+    // Deduplicate DINO parts
+    const uniqueDinoParts = Array.from(new Set(allDinoParts));
+    // Limit to 6 for best DINO performance
+    const finalDinoParts = uniqueDinoParts.slice(0, 6);
+
+    // Build DINO prompt with " . " separator (GroundingDINO standard)
+    const dinoPrompt = finalDinoParts.join(' . ');
+    const changeType = matchedRegions.join('+');
+    const negativeAdditions = Array.from(new Set(allNegatives)).join(', ');
+
+    console.log(`🧠 Smart Prompt Analysis (v2):`);
+    console.log(`   User Prompt: "${userPrompt.substring(0, 80)}${userPrompt.length > 80 ? '...' : ''}"`);
+    console.log(`   Matched Regions: [${matchedRegions.join(', ')}]`);
+    console.log(`   DINO Prompt: "${dinoPrompt}"`);
+    console.log(`   Denoise: ${maxDenoise}`);
+    console.log(`   DINO Threshold: ${minThreshold}`);
+    console.log(`   Mask Dilation: ${maxDilation}px`);
+
+    return {
+        dinoPrompt,
+        denoise: maxDenoise,
+        dinoThreshold: minThreshold,
+        maskDilation: maxDilation,
+        negativeAdditions,
+        changeType
+    };
+}
+// ========== END SMART ANALYZER (v2) ==========
+
 async function uploadImageToComfy(dataUrl: string, filename: string) {
     try {
         const base64Data = dataUrl.split(',')[1];
@@ -665,9 +959,31 @@ const generateSimpleWorkflow = (params: any) => {
             }
         };
     }
-    // Auto-Inpaint: GroundingDINO + SAM auto-masking
+    // Auto-Inpaint: GroundingDINO + SAM auto-masking (Smart Automation)
     else if (type === "auto_inpaint") {
-        console.log(`🎭 Building auto-inpaint workflow with mask_prompt: "${params.mask_prompt}"`);
+        // === USE SMART ANALYZER to extract DINO prompt from user's natural language ===
+        const analysis = analyzeInpaintPrompt(params.prompt || '', params.negative_prompt || '');
+        const dinoPrompt = params._dino_prompt_override || analysis.dinoPrompt;
+        const autoDenoise = params.denoising_strength ?? analysis.denoise;
+        const autoThreshold = analysis.dinoThreshold;
+        const autoMaskDilation = analysis.maskDilation;
+
+        // Auto-enhance negative prompt
+        let enhancedNegative = params.negative_prompt || '';
+        if (!enhancedNegative || enhancedNegative.trim().length < 10) {
+            enhancedNegative = analysis.negativeAdditions;
+        } else {
+            // Append smart additions if user provided some negative
+            enhancedNegative = enhancedNegative + ', ' + analysis.negativeAdditions;
+        }
+
+        console.log(`🎭 Building SMART auto-inpaint workflow:`);
+        console.log(`   User Prompt: "${params.prompt}"`);
+        console.log(`   DINO Detection: "${dinoPrompt}"`);
+        console.log(`   Denoise: ${autoDenoise}`);
+        console.log(`   DINO Threshold: ${autoThreshold}`);
+        console.log(`   Mask Dilation: ${autoMaskDilation}px`);
+        console.log(`   Enhanced Negative: "${enhancedNegative.substring(0, 80)}..."`);
 
         const ID_AI = {
             CHECKPOINT: "1",
@@ -685,15 +1001,21 @@ const generateSimpleWorkflow = (params: any) => {
             SAVE_IMAGE: "13"
         };
 
-        const ckptName = params.model_id || "realistic-vision-inpaint.safetensors";
+        // Use user's selected model, fallback to SDXL base
+        const ckptName = params.model_id || "sd_xl_base_1.0.safetensors";
         const samplerMap: Record<string, string> = {
             "Euler a": "euler_ancestral",
             "euler_a": "euler_ancestral",
             "Euler": "euler",
             "DPM++ 2M": "dpmpp_2m",
+            "DPM++ 2M Karras": "dpmpp_2m",
+            "DPM++ SDE": "dpmpp_sde",
+            "DPM++ SDE Karras": "dpmpp_sde",
+            "DDIM": "ddim",
             "UniPC": "uni_pc"
         };
-        const comfySampler = samplerMap[params.sampler] || "euler_ancestral";
+        const comfySampler = samplerMap[params.sampler] || "dpmpp_2m";
+        const scheduler = (params.sampler || '').includes('Karras') ? 'karras' : 'normal';
 
         workflow[ID_AI.CHECKPOINT] = {
             class_type: "CheckpointLoaderSimple",
@@ -707,7 +1029,7 @@ const generateSimpleWorkflow = (params: any) => {
 
         workflow[ID_AI.PROMPT_NEG] = {
             class_type: "CLIPTextEncode",
-            inputs: { text: params.negative_prompt || "", clip: [ID_AI.CHECKPOINT, 1] }
+            inputs: { text: enhancedNegative, clip: [ID_AI.CHECKPOINT, 1] }
         };
 
         workflow[ID_AI.LOAD_IMAGE] = {
@@ -728,8 +1050,8 @@ const generateSimpleWorkflow = (params: any) => {
         workflow[ID_AI.DINO_SAM_SEGMENT] = {
             class_type: "GroundingDinoSAMSegment (segment anything)",
             inputs: {
-                prompt: params.mask_prompt || "face",
-                threshold: params.dino_threshold || 0.3,
+                prompt: dinoPrompt,
+                threshold: autoThreshold,
                 grounding_dino_model: [ID_AI.DINO_LOADER, 0],
                 sam_model: [ID_AI.SAM_LOADER, 0],
                 image: [ID_AI.LOAD_IMAGE, 0]
@@ -738,12 +1060,12 @@ const generateSimpleWorkflow = (params: any) => {
 
         workflow[ID_AI.DILATE_MASK] = {
             class_type: "ImpactDilateMask",
-            inputs: { mask: [ID_AI.DINO_SAM_SEGMENT, 1], dilation: 10 }
+            inputs: { mask: [ID_AI.DINO_SAM_SEGMENT, 1], dilation: autoMaskDilation }
         };
 
         workflow[ID_AI.BLUR_MASK] = {
             class_type: "ImpactGaussianBlurMask",
-            inputs: { mask: [ID_AI.DILATE_MASK, 0], kernel_size: 10, sigma: 5 }
+            inputs: { mask: [ID_AI.DILATE_MASK, 0], kernel_size: 15, sigma: 8 }
         };
 
         workflow[ID_AI.VAE_ENCODE_INPAINT] = {
@@ -752,7 +1074,7 @@ const generateSimpleWorkflow = (params: any) => {
                 pixels: [ID_AI.LOAD_IMAGE, 0],
                 vae: [ID_AI.CHECKPOINT, 2],
                 mask: [ID_AI.BLUR_MASK, 0],
-                grow_mask_by: 6
+                grow_mask_by: 12
             }
         };
 
@@ -764,11 +1086,11 @@ const generateSimpleWorkflow = (params: any) => {
                 negative: [ID_AI.PROMPT_NEG, 0],
                 latent_image: [ID_AI.VAE_ENCODE_INPAINT, 0],
                 seed: params.seed && params.seed !== -1 ? Number(params.seed) : Math.floor(Math.random() * 10000000),
-                steps: Number(params.steps) || 20,
-                cfg: Number(params.cfg_scale) || 7.0,
+                steps: Number(params.steps) || 25,
+                cfg: Number(params.cfg_scale) || 7.5,
                 sampler_name: comfySampler,
-                scheduler: "normal",
-                denoise: Number(params.denoise) || 0.75
+                scheduler: scheduler,
+                denoise: autoDenoise
             }
         };
 

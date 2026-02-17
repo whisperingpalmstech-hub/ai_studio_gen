@@ -927,10 +927,16 @@ export default function GeneratePage() {
                                             <Zap size={20} color="#a78bfa" />
                                         </div>
                                         <div>
-                                            <h4 style={{ color: 'white', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>Full Automation Mode</h4>
+                                            <h4 style={{ color: 'white', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>Smart Auto-Mask</h4>
                                             <p style={{ color: '#9ca3af', fontSize: '0.75rem', lineHeight: 1.5 }}>
-                                                Grok will analyze your prompt, detect subject regions using GroundingDINO, and auto-generate precise masks. No manual painting required.
+                                                Just describe what you want in the prompt — the system will automatically detect what to change using AI. No manual masking needed!
                                             </p>
+                                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem' }}>
+                                                <p style={{ color: '#6b7280', fontSize: '0.7rem', marginBottom: '0.25rem' }}>✅ Good prompt examples:</p>
+                                                <p style={{ color: '#a78bfa', fontSize: '0.7rem' }}>&quot;casual pink t-shirt and blue jeans, modern outfit&quot;</p>
+                                                <p style={{ color: '#a78bfa', fontSize: '0.7rem' }}>&quot;blonde wavy hairstyle, natural look&quot;</p>
+                                                <p style={{ color: '#a78bfa', fontSize: '0.7rem' }}>&quot;tropical beach background, sunny day&quot;</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -983,7 +989,11 @@ export default function GeneratePage() {
                         <textarea
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            placeholder="A majestic dragon soaring through a cyberpunk city at sunset, neon lights reflecting off its scales, cinematic lighting, highly detailed, 8k..."
+                            placeholder={mode === 'inpaint'
+                                ? "Describe what you want the changed area to look like, e.g.: 'casual pink t-shirt and blue jeans, modern western outfit, natural fabric texture'"
+                                : mode === 'upscale'
+                                    ? "Optional: add details to enhance during upscale..."
+                                    : "A majestic dragon soaring through a cyberpunk city at sunset, neon lights reflecting off its scales, cinematic lighting, highly detailed, 8k..."}
                             style={{ ...textAreaStyle, height: '8rem', marginBottom: '0.75rem' }}
                         />
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1016,9 +1026,16 @@ export default function GeneratePage() {
                         <textarea
                             value={negativePrompt}
                             onChange={(e) => setNegativePrompt(e.target.value)}
-                            placeholder="blurry, low quality, distorted, ugly, bad anatomy..."
+                            placeholder={mode === 'inpaint'
+                                ? "blurry, low quality, distorted, bad anatomy, extra limbs, deformed, artifacts"
+                                : "blurry, low quality, distorted, ugly, bad anatomy..."}
                             style={{ ...textAreaStyle, height: '5rem' }}
                         />
+                        {mode === 'inpaint' && !negativePrompt && (
+                            <p style={{ color: '#6b7280', fontSize: '0.7rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
+                                💡 Tip: Leave empty for smart auto-negative, or add terms like the original clothing type to avoid artifacts
+                            </p>
+                        )}
                     </div>
 
                     {/* Aspect Ratio (Only for Txt2Img usually) */}
