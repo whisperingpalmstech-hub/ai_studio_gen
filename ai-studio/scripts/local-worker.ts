@@ -72,7 +72,6 @@ interface InpaintAnalysis {
     maskDilation: number;     // How much to expand the mask
     negativeAdditions: string; // Auto-added negative prompt terms
     changeType: string;       // For logging (comma-separated if multiple)
-    matchedRegions: string[]; // List of detected region IDs
 }
 
 function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): InpaintAnalysis {
@@ -94,20 +93,20 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
             keywords: ['shirt', 't-shirt', 'tshirt', 'blouse', 'top', 'sweater', 'hoodie', 'jacket', 'coat',
                 'vest', 'kurta', 'polo', 'tank top', 'crop top', 'cardigan', 'blazer', 'sweatshirt',
                 'jersey', 'tunic', 'pullover', 'windbreaker', 'parka', 'fleece'],
-            dinoParts: ['shirt', 'clothes', 'clothing'],
-            denoise: 0.55,
+            dinoParts: ['person', 'clothes'],
+            denoise: 0.65,
             threshold: 0.15,
-            dilation: 12,
+            dilation: 20,
             negatives: 'wrong neckline, mismatched sleeves'
         },
         lower_clothing: {
             keywords: ['jeans', 'pants', 'trousers', 'shorts', 'skirt', 'leggings', 'salwar', 'pajama',
                 'chinos', 'joggers', 'cargo pants', 'culottes', 'palazzo', 'flares', 'capri',
                 'bermuda', 'sweatpants', 'track pants', 'dhoti'],
-            dinoParts: ['pants', 'clothes', 'clothing'],
-            denoise: 0.55,
+            dinoParts: ['person', 'clothes'],
+            denoise: 0.65,
             threshold: 0.15,
-            dilation: 12,
+            dilation: 20,
             negatives: 'wrong leg shape'
         },
         full_clothing: {
@@ -117,9 +116,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'wardrobe', 'frock', 'anarkali', 'churidar', 'sharara', 'ghagra', 'kaftan',
                 'abaya', 'kimono', 'hanbok', 'overalls', 'bodysuit', 'onesie'],
             dinoParts: ['clothes', 'clothing', 'garment', 'outfit'],
-            denoise: 0.6,
+            denoise: 0.65,
             threshold: 0.15,
-            dilation: 15,
+            dilation: 25,
             negatives: 'previous clothing visible, mixed outfit styles, old garment showing'
         },
         shoes: {
@@ -319,24 +318,11 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         const match = prompt.match(pattern);
         if (match && matchedRegions.length === 0) {
             const item = match[1];
+            // Try to figure out what region the added item belongs to  
             allDinoParts.push(item, 'person');
             matchedRegions.push('add_item');
             maxDenoise = Math.max(maxDenoise, 0.55);
             maxDilation = Math.max(maxDilation, 15);
-        }
-    }
-
-    // "Replace [SOURCE]" patterns - CRITICAL for "only change this"
-    const replacePatterns = [
-        /(?:replace|instead of|change)\s+(?:the\s+)?(saree|sari|dress|shirt|top|jeans|pants|background|hair|face)/i,
-    ];
-    for (const pattern of replacePatterns) {
-        const match = userPrompt.match(pattern);
-        if (match) {
-            const sourceItem = match[1];
-            console.log(`🎯 Explicit source target identified: ${sourceItem}`);
-            allDinoParts.unshift(sourceItem); // Prioritize the specific item to replace
-            if (!matchedRegions.includes('specific_replace')) matchedRegions.push('specific_replace');
         }
     }
 
@@ -385,8 +371,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         dinoThreshold: minThreshold,
         maskDilation: maxDilation,
         negativeAdditions,
-        changeType,
-        matchedRegions
+        changeType
     };
 }
 // ========== END SMART ANALYZER (v2) ==========
@@ -1137,38 +1122,8 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: { mask: [ID_AI.DILATE_MASK, 0], kernel_size: 15, sigma: 8 }
         };
 
-        // === SURGICAL PROTECTION LOGIC ===
-        // Subtract head/skin from mask to prevent identity change
-        const isIdentityChange = analysis.matchedRegions.includes('face') || analysis.matchedRegions.includes('makeup') || analysis.matchedRegions.includes('hair');
-        const PROTECT_ID = {
-            DINO: "20",
-            SAM: "21",
-            SUBTRACT: "22"
-        };
-
-        if (!isIdentityChange) {
-            workflow[PROTECT_ID.DINO] = {
-                class_type: "GroundingDinoSAMSegment (segment anything)",
-                inputs: {
-                    prompt: "face . head . skin . hands . neck",
-                    threshold: 0.25,
-                    grounding_dino_model: [ID_AI.DINO_LOADER, 0],
-                    sam_model: [ID_AI.SAM_LOADER, 0],
-                    image: [ID_AI.LOAD_IMAGE, 0]
-                }
-            };
-
-            workflow[PROTECT_ID.SUBTRACT] = {
-                class_type: "MaskBinaryOps",
-                inputs: {
-                    mask_a: [ID_AI.BLUR_MASK, 0],
-                    mask_b: [PROTECT_ID.DINO, 1],
-                    operation: "subtract"
-                }
-            };
-        }
-
         // Use VAEEncode + SetLatentNoiseMask instead of VAEEncodeForInpaint
+        // This avoids the Byte/Float tensor type mismatch with auto-generated masks
         workflow[ID_AI.VAE_ENCODE] = {
             class_type: "VAEEncode",
             inputs: {
@@ -1181,7 +1136,7 @@ const generateSimpleWorkflow = (params: any) => {
             class_type: "SetLatentNoiseMask",
             inputs: {
                 samples: [ID_AI.VAE_ENCODE, 0],
-                mask: !isIdentityChange ? [PROTECT_ID.SUBTRACT, 0] : [ID_AI.BLUR_MASK, 0]
+                mask: [ID_AI.BLUR_MASK, 0]
             }
         };
 
