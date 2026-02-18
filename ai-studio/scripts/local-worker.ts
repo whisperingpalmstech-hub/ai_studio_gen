@@ -94,7 +94,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'vest', 'kurta', 'polo', 'tank top', 'crop top', 'cardigan', 'blazer', 'sweatshirt',
                 'jersey', 'tunic', 'pullover', 'windbreaker', 'parka', 'fleece'],
             dinoParts: ['shirt', 'top', 'upper clothes'],
-            denoise: 0.55,
+            denoise: 0.75,
             threshold: 0.2,
             dilation: 6,
             negatives: 'wrong neckline, mismatched sleeves'
@@ -104,7 +104,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'chinos', 'joggers', 'cargo pants', 'culottes', 'palazzo', 'flares', 'capri',
                 'bermuda', 'sweatpants', 'track pants', 'dhoti'],
             dinoParts: ['pants', 'jeans', 'lower clothes'],
-            denoise: 0.55,
+            denoise: 0.75,
             threshold: 0.2,
             dilation: 6,
             negatives: 'wrong leg shape'
@@ -116,7 +116,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'wardrobe', 'frock', 'anarkali', 'churidar', 'sharara', 'ghagra', 'kaftan',
                 'abaya', 'kimono', 'hanbok', 'overalls', 'bodysuit', 'onesie'],
             dinoParts: ['clothes', 'dress', 'garment'],
-            denoise: 0.55,
+            denoise: 0.75,
             threshold: 0.2,
             dilation: 8,
             negatives: 'previous clothing visible, mixed outfit styles, old garment showing'
@@ -126,7 +126,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'stilettos', 'wedges', 'moccasins', 'oxfords', 'pumps', 'flip flops', 'crocs',
                 'trainers', 'footwear', 'chappal', 'juttis', 'kolhapuri'],
             dinoParts: ['shoes', 'feet'],
-            denoise: 0.55,
+            denoise: 0.75,
             threshold: 0.2,
             dilation: 15,
             negatives: 'mismatched shoes, floating feet'
@@ -159,7 +159,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'hair color', 'hair length', 'long hair', 'short hair', 'mohawk',
                 'undercut', 'fade', 'crew cut', 'cornrows', 'pigtails', 'updo'],
             dinoParts: ['hair', 'head'],
-            denoise: 0.55,
+            denoise: 0.75,
             threshold: 0.2,
             dilation: 15,
             negatives: 'bald patches, uneven hair, hair artifacts, wig-like'
@@ -188,7 +188,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'shawl', 'gloves', 'mittens', 'umbrella', 'cane', 'walking stick',
                 'headphones', 'airpods', 'mask', 'face mask'],
             dinoParts: ['glasses', 'jewelry', 'hat', 'necklace'],
-            denoise: 0.5,
+            denoise: 0.75,
             threshold: 0.2,
             dilation: 12,
             negatives: 'floating accessories, misplaced items, wrong size'
@@ -1015,10 +1015,10 @@ const generateSimpleWorkflow = (params: any) => {
         // === USE SMART ANALYZER to extract DINO prompt from user's natural language ===
         const analysis = analyzeInpaintPrompt(params.prompt || '', params.negative_prompt || '');
         const dinoPrompt = params._dino_prompt_override || analysis.dinoPrompt;
-        // CRITICAL: Always use the smart analyzer's denoise — the frontend slider (0.75)
-        // is way too high for inpainting and WILL regenerate the person's face.
-        // For clothing-only changes, 0.4-0.55 preserves identity while changing textures.
-        const autoDenoise = Math.min(analysis.denoise, 0.65);
+        // Use the user's frontend slider value if provided, otherwise fall back to the analyzer's value.
+        // The analyzer now returns higher denoise for clothing (0.70-0.75) so the model
+        // actually transforms the clothing to match the prompt.
+        const autoDenoise = params.denoising_strength != null ? params.denoising_strength : analysis.denoise;
         const autoThreshold = analysis.dinoThreshold;
         const autoMaskDilation = analysis.maskDilation;
 
