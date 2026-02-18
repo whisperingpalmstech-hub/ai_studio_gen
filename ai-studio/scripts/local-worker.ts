@@ -113,10 +113,12 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
             keywords: ['shirt', 't-shirt', 'tshirt', 'blouse', 'top', 'sweater', 'hoodie', 'jacket', 'coat',
                 'vest', 'kurta', 'polo', 'tank top', 'crop top', 'cardigan', 'blazer', 'sweatshirt',
                 'jersey', 'tunic', 'pullover', 'windbreaker', 'parka', 'fleece'],
-            dinoParts: ['shirt'],
-            denoise: 0.40,
-            threshold: 0.35,
-            dilation: 4,
+            // BROAD DETECTION: The user wants to REPLACE what's in the image, not find what they typed.
+            // We don't know if the image has a shirt, saree, or dress — use broad terms!
+            dinoParts: ['shirt', 'clothing', 'garment', 'top'],
+            denoise: 0.55,
+            threshold: 0.25,
+            dilation: 8,
             negatives: 'wrong neckline, mismatched sleeves',
             isClothing: true
         },
@@ -124,10 +126,10 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
             keywords: ['jeans', 'pants', 'trousers', 'shorts', 'skirt', 'leggings', 'salwar', 'pajama',
                 'chinos', 'joggers', 'cargo pants', 'culottes', 'palazzo', 'flares', 'capri',
                 'bermuda', 'sweatpants', 'track pants', 'dhoti'],
-            dinoParts: ['pants'],
-            denoise: 0.40,
-            threshold: 0.35,
-            dilation: 4,
+            dinoParts: ['pants', 'trousers', 'clothing'],
+            denoise: 0.55,
+            threshold: 0.25,
+            dilation: 8,
             negatives: 'wrong leg shape',
             isClothing: true
         },
@@ -137,10 +139,10 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'casual', 'formal', 'modern', 'ethnic', 'uniform', 'costume', 'apparel',
                 'wardrobe', 'frock', 'anarkali', 'churidar', 'sharara', 'ghagra', 'kaftan',
                 'abaya', 'kimono', 'hanbok', 'overalls', 'bodysuit', 'onesie'],
-            dinoParts: ['dress', 'clothes'],
-            denoise: 0.45,
-            threshold: 0.30,
-            dilation: 6,
+            dinoParts: ['dress', 'clothing', 'garment', 'outfit'],
+            denoise: 0.55,
+            threshold: 0.22,
+            dilation: 10,
             negatives: 'previous clothing visible, mixed outfit styles, old garment showing',
             isClothing: true
         },
@@ -361,15 +363,42 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         }
     }
 
+    // ============ EXTRACT DINO HINTS FROM NEGATIVE PROMPT ============
+    // CRITICAL INSIGHT: The negative prompt often describes what's currently IN the image!
+    // e.g., "saree, red color, traditional dress" → DINO should detect "saree" or "dress"
+    // This is the KEY to making inpaint work when the target clothing differs from the current.
+    const negPrompt = userNegative.toLowerCase();
+    const clothingKeywordsFromNegative: string[] = [];
+    const allClothingTerms = [
+        'saree', 'sari', 'dress', 'shirt', 'blouse', 'kurta', 'suit', 'gown', 'lehenga',
+        'jacket', 'coat', 'pants', 'jeans', 'trousers', 'shorts', 'skirt', 'top',
+        'sweater', 'hoodie', 'blazer', 'cardigan', 'vest', 'jumpsuit', 'romper',
+        'frock', 'tunic', 'kaftan', 'abaya', 'kimono', 'uniform', 'costume',
+        'traditional', 'western', 'formal', 'casual', 't-shirt', 'tshirt',
+        'dupatta', 'churidar', 'salwar', 'dhoti', 'overalls'
+    ];
+    for (const term of allClothingTerms) {
+        if (negPrompt.includes(term)) {
+            clothingKeywordsFromNegative.push(term);
+        }
+    }
+    if (clothingKeywordsFromNegative.length > 0) {
+        console.log(`🔍 Detected CURRENT clothing from negative prompt: [${clothingKeywordsFromNegative.join(', ')}]`);
+        // Add these as DINO detection terms — they describe what's actually in the image!
+        allDinoParts.push(...clothingKeywordsFromNegative);
+        // Also increase dilation to ensure full coverage of the current garment
+        maxDilation = Math.max(maxDilation, 12);
+    }
+
     // ============ CALCULATE FINAL VALUES ============
 
     // If nothing matched at all → smart fallback
     if (matchedRegions.length === 0) {
         console.log('⚠️ No specific region detected in prompt, defaulting to clothing detection');
-        allDinoParts = ['shirt', 'pants'];
-        maxDenoise = 0.40;
-        maxDilation = 4;
-        minThreshold = 0.35;
+        allDinoParts = ['clothing', 'garment', 'dress', 'shirt'];
+        maxDenoise = 0.55;
+        maxDilation = 10;
+        minThreshold = 0.22;
         matchedRegions.push('general_detection');
         isClothingOnly = true;
     }
@@ -377,9 +406,9 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
     // Multi-region adjustments — but be conservative for clothing
     if (matchedRegions.length > 1) {
         if (isClothingOnly) {
-            // Clothing-only multi-region: keep denoise LOW to protect identity
-            maxDenoise = Math.min(maxDenoise + 0.02, 0.50);
-            maxDilation = Math.min(maxDilation + 2, 8);
+            // Clothing-only multi-region: moderate denoise to allow change while preserving identity
+            maxDenoise = Math.min(maxDenoise + 0.05, 0.60);
+            maxDilation = Math.min(maxDilation + 4, 14);
             console.log(`🔀 Multi-region CLOTHING change: ${matchedRegions.join(' + ')} (identity-safe mode)`);
         } else {
             maxDenoise = Math.min(maxDenoise + 0.05, 0.8);
@@ -395,17 +424,19 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
 
     // Deduplicate DINO parts
     const uniqueDinoParts = Array.from(new Set(allDinoParts));
-    // Limit to 4 for best DINO precision (fewer = more accurate masks)
-    const finalDinoParts = uniqueDinoParts.slice(0, 4);
+    // Limit to 5 for broader detection (more terms = higher chance of finding the garment)
+    const finalDinoParts = uniqueDinoParts.slice(0, 5);
 
     // Build DINO prompt with " . " separator (GroundingDINO standard)
     const dinoPrompt = finalDinoParts.join(' . ');
     const changeType = matchedRegions.join('+');
     const negativeAdditions = Array.from(new Set(allNegatives)).join(', ');
 
-    console.log(`🧠 Smart Prompt Analysis (v3 — Identity-Safe):`);
+    console.log(`🧠 Smart Prompt Analysis (v4 — Negative-Aware):`);
     console.log(`   User Prompt: "${userPrompt.substring(0, 80)}${userPrompt.length > 80 ? '...' : ''}"`);
+    console.log(`   Negative Prompt: "${userNegative.substring(0, 80)}${userNegative.length > 80 ? '...' : ''}"`);
     console.log(`   Matched Regions: [${matchedRegions.join(', ')}]`);
+    console.log(`   Clothing Keywords from Negative: [${clothingKeywordsFromNegative.join(', ')}]`);
     console.log(`   Clothing Only: ${isClothingOnly}`);
     console.log(`   DINO Prompt: "${dinoPrompt}"`);
     console.log(`   Denoise: ${maxDenoise}`);
@@ -1063,10 +1094,10 @@ const generateSimpleWorkflow = (params: any) => {
         // === USE SMART ANALYZER to extract DINO prompt from user's natural language ===
         const analysis = analyzeInpaintPrompt(params.prompt || '', params.negative_prompt || '');
         const dinoPrompt = params._dino_prompt_override || analysis.dinoPrompt;
-        // CRITICAL: Always use the smart analyzer's denoise — the frontend slider (0.75)
-        // is way too high for inpainting and WILL regenerate the person's face.
-        // For clothing-only changes, cap at 0.45 to preserve identity.
-        const maxDenoiseForType = analysis.isClothingOnly ? 0.45 : 0.65;
+        // Use the smart analyzer's denoise. For clothing changes, cap at 0.60
+        // to allow dramatic outfit changes (e.g., saree → jacket) while still
+        // preserving identity. Too low (0.40) = nothing changes!
+        const maxDenoiseForType = analysis.isClothingOnly ? 0.60 : 0.70;
         const autoDenoise = Math.min(analysis.denoise, maxDenoiseForType);
         const autoThreshold = analysis.dinoThreshold;
         const autoMaskDilation = analysis.maskDilation;
