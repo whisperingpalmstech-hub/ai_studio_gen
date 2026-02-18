@@ -65,6 +65,21 @@ function cleanPrompt(text: string): string {
     return cleaned.trim();
 }
 
+// Strip person-describing words from prompt for clothing inpainting
+// "a lady with red t-shirt with black trouser" → "red t-shirt with black trouser"
+// This prevents the model from regenerating the entire person when only clothes should change
+function stripPersonDescriptors(text: string): string {
+    // Remove subject descriptors - the person is already in the image!
+    let result = text;
+    // Remove patterns like "a lady with", "a man wearing", "a person in", "a woman with"
+    result = result.replace(/^\s*(a|an|the)?\s*(lady|woman|man|girl|boy|person|people|guy|gentleman|madam|female|male|human|individual|model|subject)\s*(with|wearing|in|having|who has|dressed in)?\s*/gi, '');
+    // Remove trailing "on her", "on him" etc.
+    result = result.replace(/\s+(on|for)\s+(her|him|them|the person|the lady|the man)\s*$/gi, '');
+    // Clean up leftover articles/prepositions at the start
+    result = result.replace(/^\s*(with|in|wearing|having|dressed in)\s+/gi, '');
+    return result.trim() || text.trim(); // Fallback to original if everything got stripped
+}
+
 interface InpaintAnalysis {
     dinoPrompt: string;       // What GroundingDINO should detect in the image
     denoise: number;          // Auto-tuned denoise strength
@@ -72,6 +87,7 @@ interface InpaintAnalysis {
     maskDilation: number;     // How much to expand the mask
     negativeAdditions: string; // Auto-added negative prompt terms
     changeType: string;       // For logging (comma-separated if multiple)
+    isClothingOnly: boolean;  // Whether this is a clothing-only change (identity preservation)
 }
 
 function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): InpaintAnalysis {
@@ -79,8 +95,11 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
 
     // ============ COMPREHENSIVE KEYWORD MAPS ============
     // CRITICAL: GroundingDINO works with SIMPLE NOUNS only!
-    // "person", "clothes", "shirt", "face" = GOOD
-    // "upper body clothing", "torso clothing" = BAD (DINO can't detect these)
+    // "shirt", "pants", "face" = GOOD (specific)
+    // "upper clothes", "lower clothes", "clothing" = BAD (detects entire person!)
+    // FIX: Use the MOST SPECIFIC term possible. "shirt" not "upper clothes".
+    //       Higher threshold (0.35+) for clothing to avoid detecting face/body.
+    //       Lower denoise (0.40-0.45) for clothing to preserve identity.
     const REGIONS: Record<string, {
         keywords: string[];
         dinoParts: string[];
@@ -88,26 +107,29 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         threshold: number;
         dilation: number;
         negatives: string;
+        isClothing?: boolean;  // Flag for identity-preservation logic
     }> = {
         upper_clothing: {
             keywords: ['shirt', 't-shirt', 'tshirt', 'blouse', 'top', 'sweater', 'hoodie', 'jacket', 'coat',
                 'vest', 'kurta', 'polo', 'tank top', 'crop top', 'cardigan', 'blazer', 'sweatshirt',
                 'jersey', 'tunic', 'pullover', 'windbreaker', 'parka', 'fleece'],
-            dinoParts: ['shirt', 'top', 'upper clothes'],
-            denoise: 0.55,
-            threshold: 0.2,
-            dilation: 6,
-            negatives: 'wrong neckline, mismatched sleeves'
+            dinoParts: ['shirt'],
+            denoise: 0.40,
+            threshold: 0.35,
+            dilation: 4,
+            negatives: 'wrong neckline, mismatched sleeves',
+            isClothing: true
         },
         lower_clothing: {
             keywords: ['jeans', 'pants', 'trousers', 'shorts', 'skirt', 'leggings', 'salwar', 'pajama',
                 'chinos', 'joggers', 'cargo pants', 'culottes', 'palazzo', 'flares', 'capri',
                 'bermuda', 'sweatpants', 'track pants', 'dhoti'],
-            dinoParts: ['pants', 'jeans', 'lower clothes'],
-            denoise: 0.55,
-            threshold: 0.2,
-            dilation: 6,
-            negatives: 'wrong leg shape'
+            dinoParts: ['pants'],
+            denoise: 0.40,
+            threshold: 0.35,
+            dilation: 4,
+            negatives: 'wrong leg shape',
+            isClothing: true
         },
         full_clothing: {
             keywords: ['dress', 'saree', 'sari', 'gown', 'jumpsuit', 'romper', 'lehenga', 'suit', 'outfit',
@@ -115,11 +137,12 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'casual', 'formal', 'modern', 'ethnic', 'uniform', 'costume', 'apparel',
                 'wardrobe', 'frock', 'anarkali', 'churidar', 'sharara', 'ghagra', 'kaftan',
                 'abaya', 'kimono', 'hanbok', 'overalls', 'bodysuit', 'onesie'],
-            dinoParts: ['clothes', 'dress', 'garment'],
-            denoise: 0.55,
-            threshold: 0.2,
-            dilation: 8,
-            negatives: 'previous clothing visible, mixed outfit styles, old garment showing'
+            dinoParts: ['dress', 'clothes'],
+            denoise: 0.45,
+            threshold: 0.30,
+            dilation: 6,
+            negatives: 'previous clothing visible, mixed outfit styles, old garment showing',
+            isClothing: true
         },
         shoes: {
             keywords: ['shoes', 'sneakers', 'boots', 'heels', 'sandals', 'slippers', 'loafers', 'flats',
@@ -235,6 +258,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
     let maxDenoise = 0;
     let maxDilation = 0;
     let minThreshold = 1.0;
+    let isClothingOnly = false; // Track if ALL matched regions are clothing
     let allNegatives: string[] = ['bad anatomy, deformed, distorted, disfigured, extra limbs, blurry, artifacts, low quality'];
 
     for (const [regionName, config] of Object.entries(REGIONS)) {
@@ -253,6 +277,17 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
             allNegatives.push(config.negatives);
         } else if (isNegated) {
             console.log(`🛡️ Negative constraint detected for ${regionName} - protecting region.`);
+        }
+    }
+
+    // Determine if this is a clothing-only change (critical for identity preservation)
+    if (matchedRegions.length > 0) {
+        isClothingOnly = matchedRegions.every(r => {
+            const regionConfig = REGIONS[r];
+            return regionConfig && (regionConfig as any).isClothing === true;
+        });
+        if (isClothingOnly) {
+            console.log(`👔 CLOTHING-ONLY change detected — activating identity preservation mode`);
         }
     }
 
@@ -331,35 +366,47 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
     // If nothing matched at all → smart fallback
     if (matchedRegions.length === 0) {
         console.log('⚠️ No specific region detected in prompt, defaulting to clothing detection');
-        allDinoParts = ['clothes', 'garment', 'outfit'];
+        allDinoParts = ['shirt', 'pants'];
         maxDenoise = 0.40;
-        maxDilation = 10;
-        minThreshold = 0.2;
+        maxDilation = 4;
+        minThreshold = 0.35;
         matchedRegions.push('general_detection');
+        isClothingOnly = true;
     }
 
-    // Multi-region adjustments
+    // Multi-region adjustments — but be conservative for clothing
     if (matchedRegions.length > 1) {
-        // Multiple regions changing → slightly higher denoise for coherence
-        maxDenoise = Math.min(maxDenoise + 0.05, 0.8);
-        // Larger dilation for smoother blending between regions
-        maxDilation = Math.min(maxDilation + 5, 35);
-        console.log(`🔀 Multi-region change detected: ${matchedRegions.join(' + ')}`);
+        if (isClothingOnly) {
+            // Clothing-only multi-region: keep denoise LOW to protect identity
+            maxDenoise = Math.min(maxDenoise + 0.02, 0.50);
+            maxDilation = Math.min(maxDilation + 2, 8);
+            console.log(`🔀 Multi-region CLOTHING change: ${matchedRegions.join(' + ')} (identity-safe mode)`);
+        } else {
+            maxDenoise = Math.min(maxDenoise + 0.05, 0.8);
+            maxDilation = Math.min(maxDilation + 5, 35);
+            console.log(`🔀 Multi-region change detected: ${matchedRegions.join(' + ')}`);
+        }
+    }
+
+    // CRITICAL: For clothing changes, add strong identity-preservation negatives
+    if (isClothingOnly) {
+        allNegatives.push('different person, changed face, changed identity, different face shape, different skin color, different ethnicity, changed skin tone, face changed, new person, replaced person, different body shape, wrong face, altered face, modified face');
     }
 
     // Deduplicate DINO parts
     const uniqueDinoParts = Array.from(new Set(allDinoParts));
-    // Limit to 6 for best DINO performance
-    const finalDinoParts = uniqueDinoParts.slice(0, 6);
+    // Limit to 4 for best DINO precision (fewer = more accurate masks)
+    const finalDinoParts = uniqueDinoParts.slice(0, 4);
 
     // Build DINO prompt with " . " separator (GroundingDINO standard)
     const dinoPrompt = finalDinoParts.join(' . ');
     const changeType = matchedRegions.join('+');
     const negativeAdditions = Array.from(new Set(allNegatives)).join(', ');
 
-    console.log(`🧠 Smart Prompt Analysis (v2):`);
+    console.log(`🧠 Smart Prompt Analysis (v3 — Identity-Safe):`);
     console.log(`   User Prompt: "${userPrompt.substring(0, 80)}${userPrompt.length > 80 ? '...' : ''}"`);
     console.log(`   Matched Regions: [${matchedRegions.join(', ')}]`);
+    console.log(`   Clothing Only: ${isClothingOnly}`);
     console.log(`   DINO Prompt: "${dinoPrompt}"`);
     console.log(`   Denoise: ${maxDenoise}`);
     console.log(`   DINO Threshold: ${minThreshold}`);
@@ -371,7 +418,8 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         dinoThreshold: minThreshold,
         maskDilation: maxDilation,
         negativeAdditions,
-        changeType
+        changeType,
+        isClothingOnly
     };
 }
 // ========== END SMART ANALYZER (v2) ==========
@@ -1017,8 +1065,9 @@ const generateSimpleWorkflow = (params: any) => {
         const dinoPrompt = params._dino_prompt_override || analysis.dinoPrompt;
         // CRITICAL: Always use the smart analyzer's denoise — the frontend slider (0.75)
         // is way too high for inpainting and WILL regenerate the person's face.
-        // For clothing-only changes, 0.4-0.55 preserves identity while changing textures.
-        const autoDenoise = Math.min(analysis.denoise, 0.65);
+        // For clothing-only changes, cap at 0.45 to preserve identity.
+        const maxDenoiseForType = analysis.isClothingOnly ? 0.45 : 0.65;
+        const autoDenoise = Math.min(analysis.denoise, maxDenoiseForType);
         const autoThreshold = analysis.dinoThreshold;
         const autoMaskDilation = analysis.maskDilation;
 
@@ -1074,7 +1123,14 @@ const generateSimpleWorkflow = (params: any) => {
         const comfySampler = samplerMap[params.sampler] || "dpmpp_2m";
         const scheduler = (params.sampler || '').includes('Karras') ? 'karras' : 'normal';
 
-        const cleanedPositive = cleanPrompt(params.prompt || "");
+        // SMART PROMPT CLEANING:
+        // For clothing changes, strip person descriptors to prevent identity change
+        // "a lady with red t-shirt" → "red t-shirt" (the person is already in the image)
+        let cleanedPositive = cleanPrompt(params.prompt || "");
+        if (analysis.isClothingOnly) {
+            cleanedPositive = stripPersonDescriptors(cleanedPositive);
+            console.log(`   ✂️ Clothing prompt cleaned: "${params.prompt}" → "${cleanedPositive}"`);
+        }
 
         workflow[ID_AI.CHECKPOINT] = {
             class_type: "CheckpointLoaderSimple",
@@ -1122,9 +1178,12 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: { mask: [ID_AI.DINO_SAM_SEGMENT, 1], dilation: autoMaskDilation }
         };
 
+        // Clothing-safe blur: higher sigma for smoother mask edges (prevents hard seams)
+        const blurKernel = analysis.isClothingOnly ? 15 : 9;
+        const blurSigma = analysis.isClothingOnly ? 6 : 4;
         workflow[ID_AI.BLUR_MASK] = {
             class_type: "ImpactGaussianBlurMask",
-            inputs: { mask: [ID_AI.DILATE_MASK, 0], kernel_size: 9, sigma: 4 }
+            inputs: { mask: [ID_AI.DILATE_MASK, 0], kernel_size: blurKernel, sigma: blurSigma }
         };
 
         // VAEEncode + SetLatentNoiseMask — handles float masks from SAM correctly
@@ -1145,6 +1204,10 @@ const generateSimpleWorkflow = (params: any) => {
             }
         };
 
+        // For clothing-only changes, use lower CFG to prevent the model from 
+        // forcefully following the prompt (which would change the person)
+        const cfgForType = analysis.isClothingOnly ? 5.5 : (Number(params.cfg_scale) || 7.0);
+
         workflow[ID_AI.SAMPLER] = {
             class_type: "KSampler",
             inputs: {
@@ -1154,7 +1217,7 @@ const generateSimpleWorkflow = (params: any) => {
                 latent_image: [ID_AI.SET_LATENT_MASK, 0],
                 seed: params.seed && params.seed !== -1 ? Number(params.seed) : Math.floor(Math.random() * 10000000),
                 steps: Number(params.steps) || 30,
-                cfg: Number(params.cfg_scale) || 7.0,
+                cfg: cfgForType,
                 sampler_name: comfySampler,
                 scheduler: scheduler,
                 denoise: autoDenoise
