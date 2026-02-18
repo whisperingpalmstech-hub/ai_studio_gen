@@ -1055,8 +1055,7 @@ const generateSimpleWorkflow = (params: any) => {
             SET_LATENT_MASK: "14",
             SAMPLER: "11",
             VAE_DECODE: "12",
-            SAVE_IMAGE: "13",
-            IMAGE_DOWNSCALE: "15"
+            SAVE_IMAGE: "13"
         };
 
         // Use user's selected model, fallback to SDXL base
@@ -1097,19 +1096,6 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: { image: params.image_filename || "input.png", upload: "image" }
         };
 
-        // Downscale image to 512x512 ONLY for SAM mask detection (saves ~1GB VRAM)
-        // The full-res image is still used for VAEEncode and actual inpainting
-        workflow[ID_AI.IMAGE_DOWNSCALE] = {
-            class_type: "ImageScale",
-            inputs: {
-                image: [ID_AI.LOAD_IMAGE, 0],
-                upscale_method: "area",
-                width: 512,
-                height: 512,
-                crop: "disabled"
-            }
-        };
-
         workflow[ID_AI.DINO_LOADER] = {
             class_type: "GroundingDinoModelLoader (segment anything)",
             inputs: { model_name: "GroundingDINO_SwinT_OGC (694MB)" }
@@ -1120,7 +1106,6 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: { model_name: "sam_vit_h (2.56GB)" }
         };
 
-        // Feed DOWNSCALED image to SAM to prevent OOM on 8GB GPUs
         workflow[ID_AI.DINO_SAM_SEGMENT] = {
             class_type: "GroundingDinoSAMSegment (segment anything)",
             inputs: {
@@ -1128,7 +1113,7 @@ const generateSimpleWorkflow = (params: any) => {
                 threshold: autoThreshold,
                 grounding_dino_model: [ID_AI.DINO_LOADER, 0],
                 sam_model: [ID_AI.SAM_LOADER, 0],
-                image: [ID_AI.IMAGE_DOWNSCALE, 0]
+                image: [ID_AI.LOAD_IMAGE, 0]
             }
         };
 
@@ -1329,17 +1314,6 @@ async function processJob(job: any) {
         }
 
         // 3. Send to ComfyUI
-        // For auto_inpaint: free all cached models first to make room for SAM + DINO + SDXL
-        if (job.type === "auto_inpaint") {
-            try {
-                console.log(`🧹 Freeing VRAM before auto-inpaint (SAM needs extra memory)...`);
-                await axios.post(`${COMFYUI_URL}/free`, { unload_models: true, free_memory: true });
-                console.log(`✅ VRAM freed successfully`);
-            } catch (e: any) {
-                console.warn(`⚠️ Could not free VRAM (non-fatal): ${e.message}`);
-            }
-        }
-
         const clientId = "local-worker-" + Math.random().toString(36).substring(7);
 
         // Setup WebSocket for progress with more debugging
