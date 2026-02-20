@@ -300,7 +300,13 @@ export default function GenerateVideoPage() {
                     // Fallback for older data: search for "wan" or inpaint if no metadata exists
                     if (compatible.length === 0) {
                         if (mode === 'video_inpaint') {
-                            return m.name.toLowerCase().includes('inpaint') || m.file_path.toLowerCase().includes('inpaint');
+                            // Enforce SD-only backbone for AnimateDiff. Prevent WAN/SVD from being selectable.
+                            const lowerName = m.name.toLowerCase();
+                            const lowerPath = m.file_path.toLowerCase();
+                            if (lowerName.includes('wan') || lowerPath.includes('wan') || lowerName.includes('svd') || lowerPath.includes('svd')) {
+                                return false;
+                            }
+                            return lowerName.includes('inpaint') || lowerPath.includes('inpaint') || lowerName.includes('xl_base') || lowerPath.includes('xl_base');
                         }
                         return m.name.toLowerCase().includes('wan') || m.file_path.toLowerCase().includes('wan');
                     }
@@ -311,11 +317,13 @@ export default function GenerateVideoPage() {
                 setAvailableModels(filtered);
 
                 // Set default Wan model based on mode
-                const defaultModel = filtered.find(m =>
-                    (mode === "t2v" && (m.name.includes("T2V") || m.metadata?.compatibleWorkflows?.includes("text_to_video"))) ||
-                    (mode === "i2v" && (m.name.includes("I2V") || m.metadata?.compatibleWorkflows?.includes("image_to_video"))) ||
-                    (mode === "video_inpaint" && (m.name.includes("Inpaint") || m.metadata?.compatibleWorkflows?.includes("inpaint")))
-                );
+                const defaultModel = filtered.find(m => {
+                    const ln = m.name.toLowerCase();
+                    const lp = m.file_path.toLowerCase();
+                    return (mode === "t2v" && (ln.includes("t2v") || m.metadata?.compatibleWorkflows?.includes("text_to_video"))) ||
+                        (mode === "i2v" && (ln.includes("i2v") || m.metadata?.compatibleWorkflows?.includes("image_to_video"))) ||
+                        (mode === "video_inpaint" && (ln.includes("inpaint") || lp.includes("inpaint") || ln.includes("xl_base") || lp.includes("xl_base") || m.metadata?.compatibleWorkflows?.includes("inpaint")))
+                });
                 setSelectedModel(defaultModel || filtered[0]);
             }
         };
@@ -701,7 +709,11 @@ export default function GenerateVideoPage() {
                         </select>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '0.75rem', color: '#a78bfa', fontSize: '0.75rem' }}>
                             <Info size={14} />
-                            <span>Wan 2.1 is optimized for high-fidelity temporal consistency.</span>
+                            <span>
+                                {mode === "video_inpaint"
+                                    ? "AnimateDiff requires an SD 1.5 or SDXL base model to perform auto-masking on video."
+                                    : "Wan 2.1 is optimized for high-fidelity temporal consistency."}
+                            </span>
                         </div>
                     </div>
 
