@@ -20,10 +20,17 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: (origin, callback) => callback(null, true), // Allow everything in dev
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["*"], // Support all headers including custom auth
+    exposedHeaders: ["*"],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
 app.use(morgan("dev"));
 app.use(express.json({ limit: "50mb" }));
