@@ -28,12 +28,13 @@ import { getSupabaseClient } from "../../../../lib/supabase/client";
 import { useWebSocket } from "../../../../lib/useWebSocket";
 import { useJobRealtime } from "../../../../lib/useJobRealtime";
 import { VoiceInput } from "@/components/ui/VoiceInput";
+import { useI18n } from "@/lib/i18n";
 
 const MODES = [
-    { id: "txt2img", label: "Text to Image", icon: Sparkles, cost: 1 },
-    { id: "img2img", label: "Image to Image", icon: ImageIcon, cost: 1 },
-    { id: "inpaint", label: "AI Smart Inpaint", icon: Wand2, cost: 2 },
-    { id: "upscale", label: "Upscale", icon: Maximize, cost: 1 },
+    { id: "txt2img", label: "txt2img", icon: Sparkles, cost: 1 },
+    { id: "img2img", label: "img2img", icon: ImageIcon, cost: 1 },
+    { id: "inpaint", label: "inpaintMode", icon: Wand2, cost: 2 },
+    { id: "upscale", label: "upscaleMode", icon: Maximize, cost: 1 },
 ];
 
 const SAMPLERS = [
@@ -56,6 +57,7 @@ const ASPECT_RATIOS = [
 ];
 
 export default function GeneratePage() {
+    const { t } = useI18n();
     const [mode, setMode] = useState("txt2img");
     const [prompt, setPrompt] = useState("");
     const [negativePrompt, setNegativePrompt] = useState("");
@@ -716,7 +718,7 @@ export default function GeneratePage() {
                         }}
                     >
                         <m.icon size={16} />
-                        {m.label}
+                        {t(m.label as any)}
                     </button>
                 ))}
             </div>
@@ -986,7 +988,7 @@ export default function GeneratePage() {
                         <label style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <Sparkles style={{ width: '1rem', height: '1rem', color: '#6366f1' }} />
-                                Positive Prompt {mode === 'upscale' && '(Optional for detail)'}
+                                {t('promptLabelUI')}  {mode === 'upscale' && t('promptOptionalTitle')}
                             </div>
                             <VoiceInput onTranscript={(text) => setPrompt((prev) => prev ? prev + " " + text : text)} />
                         </label>
@@ -1025,7 +1027,7 @@ export default function GeneratePage() {
                     {/* Negative Prompt */}
                     <div style={cardStyle}>
                         <label style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
-                            <div>🚫 Negative Prompt</div>
+                            <div>🚫 {t('negativePromptLabel')}</div>
                             <VoiceInput onTranscript={(text) => setNegativePrompt((prev) => prev ? prev + " " + text : text)} />
                         </label>
                         <textarea
@@ -1103,7 +1105,7 @@ export default function GeneratePage() {
                                 <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                                     {/* Sampler */}
                                     <div>
-                                        <label style={{ ...labelStyle, marginBottom: '0.5rem' }}>Sampler</label>
+                                        <label style={{ ...labelStyle, marginBottom: '0.5rem' }}>{t('samplerTitle')}</label>
                                         <select
                                             value={sampler}
                                             onChange={(e) => setSampler(e.target.value)}
@@ -1240,9 +1242,7 @@ export default function GeneratePage() {
                                 fontWeight: 500,
                                 cursor: 'pointer'
                             }}
-                        >
-                            Stop & Reset UI
-                        </button>
+                        >\n                                    {t('stopResetUILabel')}\n                                </button>
                     )}
 
                     <p style={{ fontSize: '0.75rem', textAlign: 'center', color: '#9ca3af' }}>

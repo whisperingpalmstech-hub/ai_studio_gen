@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Loader2, Globe, Check, AlertCircle } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 interface VoiceInputProps {
     onTranscript: (text: string) => void;
@@ -18,7 +19,8 @@ const LANGUAGES = [
 export function VoiceInput({ onTranscript, className = '', placeholderMode = false }: VoiceInputProps) {
     const [isListening, setIsListening] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [language, setLanguage] = useState('hi-IN');
+    const { language: globalLanguage, setLanguage: setGlobalLanguage } = useI18n();
+    const [localVoiceLang, setLocalVoiceLang] = useState('hi-IN');
     const [showDropdown, setShowDropdown] = useState(false);
     const [status, setStatus] = useState<'' | 'success' | 'error'>('');
     const [tempTranscript, setTempTranscript] = useState('');
@@ -28,7 +30,10 @@ export function VoiceInput({ onTranscript, className = '', placeholderMode = fal
     useEffect(() => {
         // Load preference
         const savedLang = localStorage.getItem('voice_lang_pref');
-        if (savedLang) setLanguage(savedLang);
+        // if (savedLang) handleVoiceLangChange(savedLang);
+        // We will just let global layout handle it, but if VoiceInput was loaded alone we could.
+        // For now let's just use localVoiceLang from prop sync, so we can ignore localStorage logic 
+        // because global hook (useI18n) does the localStorage logic!
 
         if (typeof window !== 'undefined') {
             const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -39,6 +44,20 @@ export function VoiceInput({ onTranscript, className = '', placeholderMode = fal
             }
         }
     }, []);
+
+    useEffect(() => {
+        // Sync local voice lang to global UI lang
+        if (globalLanguage === 'hi') setLocalVoiceLang('hi-IN');
+        else if (globalLanguage === 'mr') setLocalVoiceLang('mr-IN');
+        else if (globalLanguage === 'en') setLocalVoiceLang('en-US');
+    }, [globalLanguage]);
+
+    const handleVoiceLangChange = (code: string) => {
+        setLocalVoiceLang(code);
+        if (code === 'hi-IN') setGlobalLanguage('hi');
+        else if (code === 'mr-IN') setGlobalLanguage('mr');
+        else if (code === 'en-US') setGlobalLanguage('en');
+    };
 
     const toggleListen = () => {
         if (isListening) {
@@ -56,7 +75,7 @@ export function VoiceInput({ onTranscript, className = '', placeholderMode = fal
 
         setStatus('');
         setTempTranscript('');
-        recognitionRef.current.lang = language;
+        recognitionRef.current.lang = localVoiceLang;
 
         recognitionRef.current.onstart = () => {
             setIsListening(true);
@@ -119,13 +138,13 @@ export function VoiceInput({ onTranscript, className = '', placeholderMode = fal
         setIsProcessing(true);
         try {
             // Translate if not English
-            if (language !== 'en-US' && language !== 'en-IN') {
+            if (localVoiceLang !== 'en-US' && localVoiceLang !== 'en-IN') {
                 const res = await fetch('/api/translate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         text,
-                        sourceLang: language.split('-')[0],
+                        sourceLang: localVoiceLang.split('-')[0],
                         targetLang: 'en'
                     })
                 });
@@ -155,8 +174,7 @@ export function VoiceInput({ onTranscript, className = '', placeholderMode = fal
     };
 
     const handleLangChange = (code: string) => {
-        setLanguage(code);
-        localStorage.setItem('voice_lang_pref', code);
+        handleVoiceLangChange(code);
         setShowDropdown(false);
     };
 
@@ -179,7 +197,7 @@ export function VoiceInput({ onTranscript, className = '', placeholderMode = fal
                     zIndex: 20,
                     animation: 'pulse 1.5s infinite'
                 }}>
-                    Listening ({language.split('-')[0].toUpperCase()}): {tempTranscript}
+                    Listening ({localVoiceLang.split('-')[0].toUpperCase()}): {tempTranscript}
                 </div>
             )}
 
@@ -227,8 +245,8 @@ export function VoiceInput({ onTranscript, className = '', placeholderMode = fal
                                     width: '100%',
                                     textAlign: 'left',
                                     padding: '0.5rem 1rem',
-                                    background: language === lang.code ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
-                                    color: language === lang.code ? '#a855f7' : '#d1d5db',
+                                    background: localVoiceLang === lang.code ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+                                    color: localVoiceLang === lang.code ? '#a855f7' : '#d1d5db',
                                     border: 'none',
                                     borderRadius: '0.25rem',
                                     cursor: 'pointer',

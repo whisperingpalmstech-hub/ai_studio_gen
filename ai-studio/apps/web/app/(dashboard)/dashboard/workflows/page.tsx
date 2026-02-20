@@ -6,6 +6,7 @@ import { enterpriseToast } from "@/components/ui/enterprise-toast";
 import { styledConfirm } from "@/components/ui/confirm-modal";
 import { Plus, Play, Trash2, Edit, Loader2, Calendar, Link as LinkIcon, Zap, Layout, Brush, History, Layers } from "lucide-react";
 import { WORKFLOW_TEMPLATES } from "@/lib/workflow-templates";
+import { useI18n } from "@/lib/i18n";
 
 interface Workflow {
     id: string;
@@ -23,6 +24,7 @@ const CATEGORY_ICONS: Record<string, any> = {
 };
 
 export default function WorkflowsPage() {
+    const { t } = useI18n();
     const router = useRouter();
     const [workflows, setWorkflows] = useState<Workflow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -112,11 +114,9 @@ export default function WorkflowsPage() {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
                 <div>
-                    <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'white' }}>
-                        Workflows
-                    </h1>
+                    <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'white' }}>\n                        {t('workflowTitle')}\n                    </h1>
                     <p style={{ color: '#9ca3af' }}>
-                        Build, manage, and execute your AI pipelines
+                        {t('workflowDesc')}
                     </p>
                 </div>
                 <button
@@ -138,16 +138,14 @@ export default function WorkflowsPage() {
                     onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
                     onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                 >
-                    <Plus style={{ width: '1.25rem', height: '1.25rem' }} />
-                    New Workflow
-                </button>
+                    <Plus style={{ width: '1.25rem', height: '1.25rem' }} />\n                    <Plus style={{ width: '1.25rem', height: '1.25rem' }} />\n                    {t('newWorkflow')}\n                </button>
             </div>
 
             {/* Quick Start Templates */}
             <div style={{ marginBottom: '3rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.5rem' }}>
                     <Zap size={20} style={{ color: '#f59e0b' }} />
-                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'white' }}>Quick Start Templates</h2>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'white' }}>{t('quickStartTemplates')}</h2>
                 </div>
                 <div className="workflow-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
                     {WORKFLOW_TEMPLATES.map((template) => {
@@ -230,8 +228,7 @@ export default function WorkflowsPage() {
                                         {creatingTemplate === template.id ? (
                                             <Loader2 size={16} className="animate-spin" />
                                         ) : (
-                                            <>
-                                                Use Template
+                                            <>\n                                                {t('useTemplate')}
                                                 <span style={{ fontSize: '14px' }}>→</span>
                                             </>
                                         )}
@@ -245,7 +242,7 @@ export default function WorkflowsPage() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.5rem' }}>
                 <History size={20} style={{ color: '#6366f1' }} />
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'white' }}>My Workflows</h2>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'white' }}>{t('myWorkflows')}</h2>
             </div>
 
             {/* Loading State */}
@@ -295,11 +292,9 @@ export default function WorkflowsPage() {
                         }}>
                             <Plus style={{ width: '2rem', height: '2rem', color: 'white' }} />
                         </div>
-                        <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'white', marginBottom: '0.5rem' }}>
-                            Create Workflow
-                        </h3>
+                        <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'white', marginBottom: '0.5rem' }}>\n                            {t('createWorkflow')}\n                        </h3>
                         <p style={{ fontSize: '0.875rem', color: '#9ca3af', textAlign: 'center' }}>
-                            Start from scratch with the node editor
+                            {t('createWorkflowStartFromScratch')}
                         </p>
                     </div>
 
@@ -354,7 +349,7 @@ export default function WorkflowsPage() {
                                     gap: '0.25rem'
                                 }}>
                                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }}></span>
-                                    {Array.isArray(workflow.nodes) ? workflow.nodes.length : 0} nodes
+                                    {Array.isArray(workflow.nodes) ? workflow.nodes.length : 0} {t('nodesLabel')}
                                 </div>
                             </div>
 
@@ -371,7 +366,7 @@ export default function WorkflowsPage() {
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: '#6b7280', marginBottom: '1rem' }}>
                                     <Calendar style={{ width: '0.875rem', height: '0.875rem' }} />
-                                    Updated {new Date(workflow.updated_at).toLocaleDateString()}
+                                    {t('updatedDateLabel')} {new Date(workflow.updated_at).toLocaleDateString()}
                                 </div>
 
                                 {/* Actions */}
@@ -397,9 +392,7 @@ export default function WorkflowsPage() {
                                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)'}
                                         onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}
                                     >
-                                        <Edit style={{ width: '1rem', height: '1rem' }} />
-                                        Edit
-                                    </button>
+                                        <Edit style={{ width: '1rem', height: '1rem' }} />\n                                        <Edit style={{ width: '1rem', height: '1rem' }} />\n                                        {t('editLabel')}\n                                    </button>
 
                                     <button
                                         onClick={() => handleCreate()} // Placeholder for "Run" directly from card, implies open editor then run

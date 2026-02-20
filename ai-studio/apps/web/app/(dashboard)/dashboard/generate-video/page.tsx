@@ -30,9 +30,9 @@ import { VoiceInput } from "@/components/ui/VoiceInput";
 import { I18nProvider, useI18n } from "../../../../lib/i18n";
 
 const MODES = [
-    { id: "t2v", label: "Text to Video", icon: Video },
-    { id: "i2v", label: "Image to Video", icon: Film },
-    { id: "video_inpaint", label: "Video Auto-Mask", icon: Wand2 },
+    { id: "t2v", label: "t2v", icon: Video },
+    { id: "i2v", label: "i2v", icon: Film },
+    { id: "video_inpaint", label: "video_inpaint", icon: Wand2 },
 ];
 
 const SAMPLERS = [
@@ -807,7 +807,7 @@ export default function GenerateVideoPage() {
                                 <textarea
                                     value={maskPrompt}
                                     onChange={(e) => setMaskPrompt(e.target.value)}
-                                    placeholder="Describe what the AI should find and mask... e.g., 'the person's red shirt', 'the car in background'"
+                                    placeholder={t("hideMaskPlaceholder")}
                                     style={{ ...textAreaStyle, height: '4rem', paddingRight: '3rem' }}
                                 />
                                 <div style={{ position: 'absolute', right: '0.5rem', top: '0.5rem' }}>
@@ -815,7 +815,7 @@ export default function GenerateVideoPage() {
                                 </div>
                             </div>
                             <p style={{ color: '#a78bfa', fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                                Smart AI detection will automatically find and mask these objects across all frames.
+                                {t("smartAiDesc")}
                             </p>
                         </div>
                     )}
@@ -839,7 +839,7 @@ export default function GenerateVideoPage() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <span style={{ fontSize: '0.75rem', color: '#a78bfa' }}>
-                                {prompt.length} tokens used
+                                {prompt.length} {t("tokensUsed")}
                             </span>
                             <button style={{
                                 display: 'flex',
@@ -898,18 +898,18 @@ export default function GenerateVideoPage() {
                                     onChange={(e) => setVideoFrames(Number(e.target.value))}
                                     style={inputStyle}
                                 >
-                                    <option value={81}>Standard (5s)</option>
-                                    <option value={121}>Extended (7.5s)</option>
-                                    <option value={41}>Snapshot (2.5s)</option>
+                                    <option value={81}>{t("standard5s")}</option>
+                                    <option value={121}>{t("extended7s")}</option>
+                                    <option value={41}>{t("snapshot2s")}</option>
                                 </select>
                                 <select
                                     value={videoFps}
                                     onChange={(e) => setVideoFps(Number(e.target.value))}
                                     style={inputStyle}
                                 >
-                                    <option value={16}>Cinematic (16 FPS)</option>
-                                    <option value={24}>Smooth (24 FPS)</option>
-                                    <option value={30}>Fluid (30 FPS)</option>
+                                    <option value={16}>{t("cinematic16")}</option>
+                                    <option value={24}>{t("smooth24")}</option>
+                                    <option value={30}>{t("fluid30")}</option>
                                 </select>
                             </div>
                         </div>
@@ -1229,7 +1229,7 @@ export default function GenerateVideoPage() {
                                     <div style={{ scale: '2', opacity: 0.2, marginBottom: '2rem' }}>
                                         <Film size={48} />
                                     </div>
-                                    <p style={{ fontSize: '1rem', fontWeight: 500, letterSpacing: '0.01em' }}>Stage is empty. Start production to see magic.</p>
+                                    <p style={{ fontSize: '1rem', fontWeight: 500, letterSpacing: '0.01em' }}>{t("stageEmpty")}</p>
                                 </div>
                             )}
                         </div>
@@ -1246,10 +1246,10 @@ export default function GenerateVideoPage() {
                         }}>
                             <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'white', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Production Metadata</h4>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8125rem', color: '#a78bfa' }}>
-                                <div><span style={{ opacity: 0.5 }}>Format:</span> MP4/H.264</div>
-                                <div><span style={{ opacity: 0.5 }}>Engine:</span> Wan 2.1 Native</div>
-                                <div><span style={{ opacity: 0.5 }}>Resolution:</span> {selectedAspect.width}×{selectedAspect.height}</div>
-                                <div><span style={{ opacity: 0.5 }}>Frames:</span> {videoFrames} frames</div>
+                                <div><span style={{ opacity: 0.5 }}>{t("format")}</span> MP4/H.264</div>
+                                <div><span style={{ opacity: 0.5 }}>{t("engine")}</span> Wan 2.1 Native</div>
+                                <div><span style={{ opacity: 0.5 }}>{t("resolution")}</span> {selectedAspect.width}×{selectedAspect.height}</div>
+                                <div><span style={{ opacity: 0.5 }}>{t("frames")}</span> {videoFrames} frames</div>
                             </div>
                         </div>
                     )}
@@ -1260,8 +1260,8 @@ export default function GenerateVideoPage() {
             <div style={{ marginTop: '5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
                     <div>
-                        <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', color: 'white' }}>Studio Archives</h2>
-                        <p style={{ color: '#a78bfa', fontSize: '0.875rem' }}>Your past cinematic generations</p>
+                        <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', color: 'white' }}>{t("studioArchives")}</h2>
+                        <p style={{ color: '#a78bfa', fontSize: '0.875rem' }}>{t("pastGenerations")}</p>
                     </div>
                     <button
                         onClick={() => window.location.href = '/dashboard/gallery'}

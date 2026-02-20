@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useEffect, Suspense } from 'react';
+import { useI18n } from '@/lib/i18n';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ReactFlow, {
     addEdge,
@@ -122,6 +123,7 @@ const initialEdges: Edge[] = [
 ];
 
 function WorkflowEditorContent() {
+    const { t } = useI18n();
     const searchParams = useSearchParams();
     const workflowId = searchParams.get('id');
     const router = useRouter();
@@ -213,7 +215,7 @@ function WorkflowEditorContent() {
                                 return node;
                             }));
                         }
-                        showNotification('Workflow completed successfully!');
+                        showNotification(t("workflowCompleted"));
                     } else if (job.status === 'failed') {
                         setExecutingNodeId(null);
                         setActiveJobId(null);
@@ -486,7 +488,7 @@ function WorkflowEditorContent() {
                     ...n,
                     data: { ...n.data, executing: false, progress: undefined }
                 })));
-                showNotification("Workflow Queued — watching for live updates...");
+                showNotification(t("workflowQueued"));
             } else if (data.error) {
                 throw new Error(data.error);
             } else {
@@ -495,7 +497,7 @@ function WorkflowEditorContent() {
 
         } catch (error: any) {
             console.error(error);
-            showNotification('Execution Error: ' + error.message, 'error');
+            showNotification(t("executionError") + ": " + error.message, 'error');
         } finally {
             setLoading(false);
         }
@@ -670,7 +672,7 @@ function WorkflowEditorContent() {
                                 background: '#4ade80',
                                 animation: 'pulse 1.5s ease-in-out infinite'
                             }} />
-                            {executingNodeId ? `Running: Node ${executingNodeId}` : 'Processing...'}
+                            {executingNodeId ? `${t("runningNode")} ${executingNodeId}` : t("processing")}
                         </div>
                     )}
                 </div>
@@ -733,7 +735,7 @@ function WorkflowEditorContent() {
                                 <div style={{ position: 'relative' }}>
                                     <input
                                         type="text"
-                                        placeholder="Search nodes..."
+                                        placeholder={t("searchNodes")}
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                         style={{

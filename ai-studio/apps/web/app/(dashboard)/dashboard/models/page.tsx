@@ -22,6 +22,7 @@ import {
     Check
 } from "lucide-react";
 import { VoiceInput } from "@/components/ui/VoiceInput";
+import { useI18n } from "@/lib/i18n";
 
 interface Model {
     id: string;
@@ -38,6 +39,7 @@ interface Model {
 }
 
 export default function ModelsPage() {
+    const { t } = useI18n();
     const [models, setModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -170,9 +172,7 @@ export default function ModelsPage() {
                         boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)'
                     }}
                 >
-                    <Plus size={18} />
-                    Add Model
-                </button>
+                    <Plus size={18} />\n                                    {t('addModel')}\n                                </button>
             </div>
 
             {/* Filter Bar */}
@@ -190,7 +190,7 @@ export default function ModelsPage() {
                     <Search style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', width: '1.25rem', height: '1.25rem', color: '#9ca3af' }} />
                     <input
                         type="text"
-                        placeholder="Search models..."
+                        placeholder="{t('searchModels')}"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         style={{
@@ -470,7 +470,7 @@ export default function ModelsPage() {
 
                         <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                             <div>
-                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#9ca3af', marginBottom: '0.5rem' }}>Model Name</label>
+                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#9ca3af', marginBottom: '0.5rem' }}>{t('modelName')}</label>
                                 <input
                                     type="text"
                                     value={newModel.name}
@@ -522,8 +522,7 @@ export default function ModelsPage() {
                             </div>
 
                             <div>
-                                <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 500, color: '#9ca3af', marginBottom: '0.5rem' }}>
-                                    <span>Description</span>
+                                <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 500, color: '#9ca3af', marginBottom: '0.5rem' }}>\n                                    <span>{t('descriptionLabel')}</span>
                                     <VoiceInput onTranscript={(text) => setNewModel(prev => ({ ...prev, description: prev.description ? prev.description + " " + text : text }))} />
                                 </label>
                                 <textarea

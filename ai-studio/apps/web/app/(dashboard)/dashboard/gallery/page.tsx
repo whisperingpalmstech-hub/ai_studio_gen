@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { Download, Trash2, Calendar, Sparkles, Search, Filter, Loader2, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 
 interface Generation {
     id: string;
@@ -26,6 +27,7 @@ export default function GalleryPage() {
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const { toast } = useToast();
+    const { t } = useI18n();
 
     useEffect(() => {
         fetchGenerations();
@@ -117,11 +119,9 @@ export default function GalleryPage() {
         <div style={{ maxWidth: '100rem', margin: '0 auto', padding: '0 1rem' }}>
             {/* Header */}
             <div style={{ marginBottom: '2rem' }}>
-                <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'white' }}>
-                    Gallery
-                </h1>
+                <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'white' }}>\n                    {t('galleryTitle')}\n                </h1>
                 <p style={{ color: '#9ca3af' }}>
-                    Browse and manage your AI-generated images
+                    {t('manageImages')}
                 </p>
             </div>
 
@@ -139,7 +139,7 @@ export default function GalleryPage() {
                     <Search style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', width: '1.25rem', height: '1.25rem', color: '#9ca3af' }} />
                     <input
                         type="text"
-                        placeholder="Search by prompt..."
+                        placeholder="{t('searchPrompt')}"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         style={{
@@ -165,9 +165,7 @@ export default function GalleryPage() {
                     color: 'white',
                     cursor: 'pointer'
                 }}>
-                    <Filter style={{ width: '1rem', height: '1rem' }} />
-                    Filter
-                </button>
+                    <Filter style={{ width: '1rem', height: '1rem' }} />\n                    <Filter style={{ width: '1rem', height: '1rem' }} />\n                    {t('filter')}\n                </button>
             </div>
 
             {/* Gallery Grid */}
@@ -184,11 +182,9 @@ export default function GalleryPage() {
                     backgroundColor: 'rgba(255, 255, 255, 0.02)'
                 }}>
                     <Sparkles style={{ width: '3rem', height: '3rem', margin: '0 auto 1rem', color: '#6366f1', opacity: 0.5 }} />
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', color: 'white' }}>
-                        No generations yet
-                    </h3>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', color: 'white' }}>\n                        {t('noGensYet')}\n                    </h3>
                     <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
-                        Start creating amazing images with AI
+                        {t('startCreatingImages')}
                     </p>
                     <a href="/dashboard/generate" style={{
                         display: 'inline-block',
@@ -198,9 +194,7 @@ export default function GalleryPage() {
                         color: 'white',
                         textDecoration: 'none',
                         fontWeight: 500
-                    }}>
-                        Generate Your First Image
-                    </a>
+                    }}>\n                        {t('genFirstImage')}\n                    </a>
                 </div>
             ) : (
                 <div className="recent-grid" style={{
@@ -306,7 +300,7 @@ export default function GalleryPage() {
                                     WebkitLineClamp: 2,
                                     WebkitBoxOrient: 'vertical'
                                 }}>
-                                    {gen.prompt || "No prompt available"}
+                                    {gen.prompt || t('noPromptAvail')}
                                 </p>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: '#9ca3af' }}>
                                     <Calendar style={{ width: '0.875rem', height: '0.875rem' }} />
@@ -413,24 +407,18 @@ export default function GalleryPage() {
 
                         {/* Details */}
                         <div style={{ padding: '2rem', overflow: 'auto' }}>
-                            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: 'white' }}>
-                                Generation Details
-                            </h2>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem', color: 'white' }}>\n                                {t('genDetails')}\n                            </h2>
 
                             <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem' }}>
-                                    PROMPT
-                                </label>
+                                <label style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem' }}>\n                                    {t('promptLabel')}\n                                </label>
                                 <p style={{ color: 'white', fontSize: '0.875rem' }}>
-                                    {selectedImage.prompt || "No prompt available"}
+                                    {selectedImage.prompt || t('noPromptAvail')}
                                 </p>
                             </div>
 
                             {selectedImage.negative_prompt && (
                                 <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem' }}>
-                                        NEGATIVE PROMPT
-                                    </label>
+                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem' }}>\n                                        {t('negPromptLabel')}\n                                    </label>
                                     <p style={{ color: 'white', fontSize: '0.875rem' }}>
                                         {selectedImage.negative_prompt}
                                     </p>
@@ -439,25 +427,25 @@ export default function GalleryPage() {
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
                                 <div>
-                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af' }}>SIZE</label>
+                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{t('sizeLabel')}</label>
                                     <p style={{ color: 'white', fontSize: '0.875rem' }}>
                                         {selectedImage.width} × {selectedImage.height}
                                     </p>
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af' }}>STEPS</label>
+                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{t('stepsLabel')}</label>
                                     <p style={{ color: 'white', fontSize: '0.875rem' }}>
                                         {selectedImage.params?.steps || selectedImage.params?.num_inference_steps || "N/A"}
                                     </p>
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af' }}>CFG SCALE</label>
+                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{t('cfgScaleLabel')}</label>
                                     <p style={{ color: 'white', fontSize: '0.875rem' }}>
                                         {selectedImage.params?.guidance_scale || "N/A"}
                                     </p>
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af' }}>SEED</label>
+                                    <label style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{t('seedLabel')}</label>
                                     <p style={{ color: 'white', fontSize: '0.875rem' }}>
                                         {selectedImage.seed}
                                     </p>
@@ -483,9 +471,7 @@ export default function GalleryPage() {
                                         fontWeight: 500
                                     }}
                                 >
-                                    <Download style={{ width: '1rem', height: '1rem' }} />
-                                    Download
-                                </button>
+                                    <Download style={{ width: '1rem', height: '1rem' }} />\n                                    <Download style={{ width: '1rem', height: '1rem' }} />\n                                    {t('downloadLabel')}\n                                </button>
                                 <button
                                     onClick={() => setConfirmDeleteId(selectedImage.id)}
                                     disabled={deletingId === selectedImage.id}
@@ -510,7 +496,7 @@ export default function GalleryPage() {
                                     ) : (
                                         <Trash2 style={{ width: '1rem', height: '1rem' }} />
                                     )}
-                                    {deletingId === selectedImage.id ? "Deleting..." : "Delete"}
+                                    {deletingId === selectedImage.id ? "Deleting..." : t('deleteLabel')}
                                 </button>
                             </div>
                         </div>
@@ -548,7 +534,7 @@ export default function GalleryPage() {
                                 <div style={{ padding: '0.75rem', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.1)' }}>
                                     <AlertTriangle size={24} />
                                 </div>
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white' }}>Confirm Deletion</h3>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white' }}>{t('confirmDelTitle')}</h3>
                             </div>
                             <button
                                 onClick={() => setConfirmDeleteId(null)}
@@ -559,7 +545,7 @@ export default function GalleryPage() {
                         </div>
 
                         <p style={{ color: '#9ca3af', marginBottom: '2rem', lineHeight: 1.6 }}>
-                            Are you sure you want to permanently delete this generation? This action will remove the image/video from storage and cannot be undone.
+                            {t('confirmDelMsg')}
                         </p>
 
                         <div style={{ display: 'flex', gap: '1rem' }}>
@@ -575,9 +561,7 @@ export default function GalleryPage() {
                                     fontWeight: 500,
                                     cursor: 'pointer'
                                 }}
-                            >
-                                Cancel
-                            </button>
+                            >\n                                {t('cancel')}\n                            </button>
                             <button
                                 onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
                                 style={{
@@ -590,9 +574,7 @@ export default function GalleryPage() {
                                     fontWeight: 600,
                                     cursor: 'pointer'
                                 }}
-                            >
-                                Delete Permanently
-                            </button>
+                            >\n                                {t('delPermanently')}\n                            </button>
                         </div>
                     </div>
                 </div>

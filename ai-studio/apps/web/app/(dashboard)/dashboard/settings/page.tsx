@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useI18n } from "@/lib/i18n";
 import { User, CreditCard, Key, Bell, Shield, LogOut, Sparkles, Copy, Trash2, Plus, Eye, EyeOff, AlertTriangle, Check, Clock, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -18,6 +19,7 @@ interface ApiKey {
 }
 
 export default function SettingsPage() {
+    const { t } = useI18n();
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<"profile" | "billing" | "api" | "notifications" | "security">("profile");
     const [profile, setProfile] = useState({ email: "", name: "", credits: 100, tier: "free" });
@@ -136,11 +138,11 @@ export default function SettingsPage() {
     };
 
     const tabs = [
-        { id: "profile" as const, label: "Profile", icon: User },
-        { id: "billing" as const, label: "Billing & Plans", icon: CreditCard },
-        { id: "api" as const, label: "API Keys", icon: Key },
-        { id: "notifications" as const, label: "Notifications", icon: Bell },
-        { id: "security" as const, label: "Security", icon: Shield },
+        { id: "profile" as const, label: t("profileTab"), icon: User },
+        { id: "billing" as const, label: t("billingTab"), icon: CreditCard },
+        { id: "api" as const, label: t("apiKeysTab"), icon: Key },
+        { id: "notifications" as const, label: t("notificationsTab"), icon: Bell },
+        { id: "security" as const, label: t("securityTab"), icon: Shield },
     ];
 
     const inputStyle: React.CSSProperties = {
@@ -162,7 +164,7 @@ export default function SettingsPage() {
                     Settings
                 </h1>
                 <p style={{ color: '#9ca3af' }}>
-                    Manage your account, API keys, and preferences
+                    {t("settingsDesc")}
                 </p>
             </div>
 
@@ -220,7 +222,7 @@ export default function SettingsPage() {
                             </h2>
 
                             <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', color: 'white' }}>Name</label>
+                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', color: 'white' }}>{t("nameLabel")}</label>
                                 <input
                                     type="text"
                                     value={profile.name}
@@ -230,7 +232,7 @@ export default function SettingsPage() {
                             </div>
 
                             <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', color: 'white' }}>Email</label>
+                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', color: 'white' }}>{t("emailLabel")}</label>
                                 <input
                                     type="email"
                                     value={profile.email}
@@ -273,7 +275,7 @@ export default function SettingsPage() {
                                         <Zap style={{ width: '1.5rem', height: '1.5rem', color: 'white' }} />
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginBottom: '0.25rem' }}>Available Credits</div>
+                                        <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginBottom: '0.25rem' }}>{t("availableCredits")}</div>
                                         <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'white', lineHeight: 1 }}>{profile.credits}</div>
                                     </div>
                                     <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
@@ -296,7 +298,7 @@ export default function SettingsPage() {
                                 {/* Credit bar */}
                                 <div style={{ marginBottom: '1rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>
-                                        <span>Usage</span>
+                                        <span>{t("usage")}</span>
                                         <span>{profile.credits} / {profile.tier === 'pro' ? '1,000' : profile.tier === 'enterprise' ? '5,000' : '100'}</span>
                                     </div>
                                     <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -463,7 +465,7 @@ export default function SettingsPage() {
                                     border: '1px solid rgba(99, 102, 241, 0.1)',
                                 }}>
                                     <div>
-                                        <div style={{ fontSize: '0.6875rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Keys Used</div>
+                                        <div style={{ fontSize: '0.6875rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>{t("keysUsed")}</div>
                                         <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>{apiKeys.length} / 5</div>
                                     </div>
                                     <div>
@@ -591,7 +593,7 @@ export default function SettingsPage() {
                                 backgroundColor: 'rgba(255, 255, 255, 0.02)',
                                 padding: '1.5rem',
                             }}>
-                                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'white', marginBottom: '1rem' }}>Quick Start</h3>
+                                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'white', marginBottom: '1rem' }}>{t("quickStart")}</h3>
                                 <div style={{
                                     background: 'rgba(0,0,0,0.3)', borderRadius: '0.5rem', padding: '1rem',
                                     fontFamily: 'monospace', fontSize: '0.8125rem', color: '#d1d5db',
@@ -655,7 +657,7 @@ export default function SettingsPage() {
                             </h2>
 
                             <div style={{ marginBottom: '2rem' }}>
-                                <h3 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem', color: 'white' }}>Change Password</h3>
+                                <h3 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem', color: 'white' }}>{t("changePassword")}</h3>
                                 <button style={{
                                     padding: '0.75rem 1.5rem', borderRadius: '0.5rem',
                                     border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -671,7 +673,7 @@ export default function SettingsPage() {
                                 border: '1px solid rgba(239, 68, 68, 0.3)',
                                 backgroundColor: 'rgba(239, 68, 68, 0.05)'
                             }}>
-                                <h3 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem', color: '#ef4444' }}>Danger Zone</h3>
+                                <h3 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem', color: '#ef4444' }}>{t("dangerZone")}</h3>
                                 <p style={{ color: '#9ca3af', marginBottom: '1rem', fontSize: '0.875rem' }}>
                                     Once you delete your account, all data will be permanently removed.
                                 </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import {
     Code2,
     Copy,
@@ -23,6 +24,7 @@ import {
 
 // ── Copy Button ──
 function CopyButton({ text }: { text: string }) {
+    const { t } = useI18n();
     const [copied, setCopied] = useState(false);
 
     const handleCopy = async () => {
@@ -53,7 +55,7 @@ function CopyButton({ text }: { text: string }) {
             }}
         >
             {copied ? <Check size={12} /> : <Copy size={12} />}
-            {copied ? "Copied!" : "Copy"}
+            {copied ? t("copied") : t("copy")}
         </button>
     );
 }
@@ -121,6 +123,7 @@ function EndpointCard({
     isOpen: boolean;
     onToggle: () => void;
 }) {
+    const { t } = useI18n();
     const methodColors: Record<string, { bg: string; text: string }> = {
         GET: { bg: "rgba(59, 130, 246, 0.15)", text: "#60a5fa" },
         POST: { bg: "rgba(34, 197, 94, 0.15)", text: "#4ade80" },
@@ -189,10 +192,10 @@ function EndpointCard({
                                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
                                     <thead>
                                         <tr style={{ background: "rgba(255, 255, 255, 0.03)" }}>
-                                            <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Name</th>
-                                            <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Type</th>
-                                            <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Required</th>
-                                            <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Description</th>
+                                            <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{t("nameLabel")}</th>
+                                            <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{t("typeLabel")}</th>
+                                            <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{t("requiredLabel")}</th>
+                                            <th style={{ padding: "0.625rem 0.75rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{t("descLabel")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -208,9 +211,9 @@ function EndpointCard({
                                                 </td>
                                                 <td style={{ padding: "0.625rem 0.75rem" }}>
                                                     {p.required ? (
-                                                        <span style={{ color: "#f87171", fontSize: "0.75rem", fontWeight: 600 }}>Required</span>
+                                                        <span style={{ color: "#f87171", fontSize: "0.75rem", fontWeight: 600 }}>{t("requiredTag")}</span>
                                                     ) : (
-                                                        <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>Optional</span>
+                                                        <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{t("optionalTag")}</span>
                                                     )}
                                                 </td>
                                                 <td style={{ padding: "0.625rem 0.75rem", color: "#9ca3af" }}>{p.description}</td>
@@ -247,6 +250,7 @@ function EndpointCard({
 
 // ── Main Page ──
 export default function ApiDocsPage() {
+    const { t } = useI18n();
     const [openEndpoint, setOpenEndpoint] = useState<string | null>("upload-image");
 
     const toggleEndpoint = (id: string) => {
@@ -275,7 +279,7 @@ export default function ApiDocsPage() {
                             API Documentation
                         </h1>
                         <p style={{ color: "#6b7280", fontSize: "0.875rem", margin: 0 }}>
-                            Integrate AI Studio into your applications
+                            {t("apiDocsDesc")}
                         </p>
                     </div>
                 </div>
@@ -291,11 +295,10 @@ export default function ApiDocsPage() {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1rem" }}>
                     <Lock size={18} color="#818cf8" />
-                    <h2 style={{ fontSize: "1.125rem", fontWeight: 700, color: "white", margin: 0 }}>Authentication</h2>
+                    <h2 style={{ fontSize: "1.125rem", fontWeight: 700, color: "white", margin: 0 }}>{t("authentication")}</h2>
                 </div>
                 <p style={{ color: "#9ca3af", fontSize: "0.875rem", lineHeight: 1.7, marginBottom: "1rem" }}>
-                    All API requests require authentication using an API key. Include the key in the <code style={{ color: "#a5b4fc", background: "rgba(99,102,241,0.1)", padding: "0.125rem 0.375rem", borderRadius: "0.25rem", fontSize: "0.8125rem" }}>x-api-key</code> header.
-                    You can also use a Supabase JWT Bearer token for user-scoped access.
+                    {t("authDesc")}
                 </p>
                 <CodeBlock
                     code={`# API Key Authentication
@@ -322,7 +325,7 @@ curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
             }}>
                 <Server size={18} color="#6b7280" style={{ flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: "200px" }}>
-                    <div style={{ fontSize: "0.75rem", color: "#6b7280", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: "0.25rem" }}>Base URL</div>
+                    <div style={{ fontSize: "0.75rem", color: "#6b7280", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: "0.25rem" }}>{t("baseUrl")}</div>
                     <code style={{ color: "#e2e8f0", fontSize: "0.9375rem", fontWeight: 500 }}>
                         http://YOUR_SERVER_IP:4000/api/v1
                     </code>
@@ -346,7 +349,7 @@ curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
                     Quick Start: 3-Step Workflow
                 </h2>
                 <p style={{ color: "#6b7280", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
-                    Every generation follows this pattern: Upload → Create Job → Poll Result
+                    {t("quickStartDesc")}
                 </p>
                 <div className="steps-grid" style={{
                     display: "grid",
@@ -355,9 +358,9 @@ curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
                     marginBottom: "2rem",
                 }}>
                     {[
-                        { step: "1", title: "Upload Image", desc: "POST /uploads/image", icon: Upload, color: "#3b82f6" },
-                        { step: "2", title: "Create Job", desc: "POST /jobs", icon: Wand2, color: "#a855f7" },
-                        { step: "3", title: "Get Result", desc: "GET /jobs/:id", icon: ImageIcon, color: "#10b981" },
+                        { step: "1", title: t("step1Title"), desc: "POST /uploads/image", icon: Upload, color: "#3b82f6" },
+                        { step: "2", title: t("step2Title"), desc: "POST /jobs", icon: Wand2, color: "#a855f7" },
+                        { step: "3", title: t("step3Title"), desc: "GET /jobs/:id", icon: ImageIcon, color: "#10b981" },
                     ].map((s) => (
                         <div key={s.step} style={{
                             borderRadius: "0.875rem",
@@ -569,9 +572,9 @@ curl -X POST http://localhost:4000/api/v1/jobs \\
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
                         <thead>
                             <tr style={{ background: "rgba(255, 255, 255, 0.03)" }}>
-                                <th style={{ padding: "0.75rem 1rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Type</th>
-                                <th style={{ padding: "0.75rem 1rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Description</th>
-                                <th style={{ padding: "0.75rem 1rem", textAlign: "center", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Credits</th>
+                                <th style={{ padding: "0.75rem 1rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{t("typeCol")}</th>
+                                <th style={{ padding: "0.75rem 1rem", textAlign: "left", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{t("descCol")}</th>
+                                <th style={{ padding: "0.75rem 1rem", textAlign: "center", color: "#6b7280", fontWeight: 600, fontSize: "0.6875rem", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{t("creditsCol")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -701,7 +704,7 @@ while True:
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
                     <Zap size={18} color="#f59e0b" />
-                    <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "white", margin: 0 }}>Rate Limits & Tier Info</h3>
+                    <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "white", margin: 0 }}>{t("rateLimitsTierInfo")}</h3>
                 </div>
                 <div style={{
                     display: "grid",

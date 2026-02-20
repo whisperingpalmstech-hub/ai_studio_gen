@@ -26,17 +26,17 @@ import { UpgradeModal } from "@/components/UpgradeModal";
 import { useI18n } from "@/lib/i18n";
 
 const navigation = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Generate", href: "/dashboard/generate", icon: Sparkles },
-    { name: "Generate Video", href: "/dashboard/generate-video", icon: Video },
-    { name: "Gallery", href: "/dashboard/gallery", icon: ImageIcon },
-    { name: "Workflows", href: "/dashboard/workflows", icon: Layers },
-    { name: "Models", href: "/dashboard/models", icon: FolderOpen },
-    { name: "API Docs", href: "/dashboard/api-docs", icon: Code2 },
+    { name: "Dashboard", translationKey: "navDashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Generate", translationKey: "navGenerate", href: "/dashboard/generate", icon: Sparkles },
+    { name: "Generate Video", translationKey: "navGenerateVideo", href: "/dashboard/generate-video", icon: Video },
+    { name: "Gallery", translationKey: "navGallery", href: "/dashboard/gallery", icon: ImageIcon },
+    { name: "Workflows", translationKey: "navWorkflows", href: "/dashboard/workflows", icon: Layers },
+    { name: "Models", translationKey: "navModels", href: "/dashboard/models", icon: FolderOpen },
+    { name: "API Docs", translationKey: "navApiDocs", href: "/dashboard/api-docs", icon: Code2 },
 ];
 
 const bottomNavigation = [
-    { name: "Settings", href: "/dashboard/settings", icon: Settings },
+    { name: "Settings", translationKey: "navSettings", href: "/dashboard/settings", icon: Settings },
 ];
 
 export default function DashboardLayout({
@@ -114,7 +114,7 @@ export default function DashboardLayout({
                         AI Studio
                     </span>
                     <div style={{ fontSize: "0.625rem", color: "#6b7280", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>
-                        Enterprise
+                        {t('enterprise')}
                     </div>
                 </div>
             </Link>
@@ -142,7 +142,7 @@ export default function DashboardLayout({
                         }}
                     >
                         <Plus style={{ marginRight: "0.5rem", width: "1rem", height: "1rem" }} />
-                        New Generation
+                        {t('newGeneration')}
                     </button>
                 </Link>
             </div>
@@ -150,27 +150,27 @@ export default function DashboardLayout({
             {/* Main Navigation */}
             <nav style={{ flex: 1, padding: "0 0.5rem", display: "flex", flexDirection: "column", gap: "0.125rem", overflowY: "auto" }}>
                 <div style={{ padding: "0 0.75rem 0.5rem", fontSize: "0.6875rem", fontWeight: 600, color: "#4b5563", textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>
-                    WORKSPACE
+                    {t('workspace')}
                 </div>
                 {navigation.slice(0, 6).map((item) => {
                     const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
                     return (
                         <Link key={item.name} href={item.href} style={getNavItemStyle(isActive)}>
                             <item.icon style={{ width: "1.125rem", height: "1.125rem" }} />
-                            {item.name}
+                            {item.translationKey ? t(item.translationKey) : item.name}
                         </Link>
                     );
                 })}
 
                 <div style={{ padding: "1rem 0.75rem 0.5rem 0.75rem", fontSize: "0.6875rem", fontWeight: 600, color: "#4b5563", textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>
-                    DEVELOPER
+                    {t('developer')}
                 </div>
                 {navigation.slice(6).map((item) => {
                     const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                     return (
                         <Link key={item.name} href={item.href} style={getNavItemStyle(isActive)}>
                             <item.icon style={{ width: "1.125rem", height: "1.125rem" }} />
-                            {item.name}
+                            {item.translationKey ? t(item.translationKey) : item.name}
                         </Link>
                     );
                 })}
@@ -183,7 +183,7 @@ export default function DashboardLayout({
                     return (
                         <Link key={item.name} href={item.href} style={getNavItemStyle(isActive)}>
                             <item.icon style={{ width: "1.125rem", height: "1.125rem" }} />
-                            {item.name}
+                            {item.translationKey ? t(item.translationKey) : item.name}
                         </Link>
                     );
                 })}
@@ -200,7 +200,7 @@ export default function DashboardLayout({
                     }}
                 >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                        <span style={{ fontSize: "0.75rem", color: "#9ca3af", fontWeight: 500, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Credits</span>
+                        <span style={{ fontSize: "0.75rem", color: "#9ca3af", fontWeight: 500, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>{t('credits')}</span>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "1.5rem", height: "1.5rem", borderRadius: "50%", background: "rgba(99, 102, 241, 0.2)" }}>
                             <Zap style={{ width: "0.75rem", height: "0.75rem", color: "#818cf8" }} />
                         </div>
@@ -213,7 +213,7 @@ export default function DashboardLayout({
                         )}
                     </div>
                     <div style={{ fontSize: "0.6875rem", color: "#6b7280", marginBottom: "0.75rem" }}>
-                        {tier === "pro" ? "Pro Plan • 1,000/mo" : tier === "enterprise" ? "Enterprise • Unlimited" : "Free tier • 100/mo"}
+                        {tier === "pro" ? t('proPlan') : tier === "enterprise" ? t('enterpriseUnlimited') : t('freeTier')}
                     </div>
                     {/* Credit bar */}
                     <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px", marginBottom: "0.75rem", overflow: "hidden" }}>
@@ -248,12 +248,12 @@ export default function DashboardLayout({
                         }}
                     >
                         <CreditCard style={{ width: "0.75rem", height: "0.75rem" }} />
-                        {tier === "pro" ? "Manage Plan" : "Upgrade Plan"}
+                        {tier === "pro" ? t('managePlan') : t('upgradePlan')}
                     </button>
 
                     {/* Language Selector */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 500, textTransform: 'uppercase' }}>UI Lang:</span>
+                        <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 500, textTransform: 'uppercase' }}>{t('uiLang')}</span>
                         <select
                             value={language}
                             onChange={(e) => setLanguage(e.target.value as any)}
@@ -309,9 +309,9 @@ export default function DashboardLayout({
                         <User style={{ width: "0.875rem", height: "0.875rem", color: "white" }} />
                     </div>
                     <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "white" }}>User</div>
+                        <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "white" }}>{t('user')}</div>
                         <div style={{ fontSize: "0.6875rem", color: "#6b7280" }}>
-                            {tier === "pro" ? "Pro" : tier === "enterprise" ? "Enterprise" : "Free"}
+                            {tier === "pro" ? t('pro') : tier === "enterprise" ? t('enterprise') : t('free')}
                         </div>
                     </div>
                     <ChevronDown style={{ width: "0.875rem", height: "0.875rem", color: "#6b7280" }} />
