@@ -138,7 +138,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
                 'casual', 'formal', 'modern', 'ethnic', 'uniform', 'costume', 'apparel',
                 'wardrobe', 'frock', 'anarkali', 'churidar', 'sharara', 'ghagra', 'kaftan',
                 'abaya', 'kimono', 'hanbok', 'overalls', 'bodysuit', 'onesie'],
-            dinoParts: ['dress', 'gown', 'outfit', 'suit'],
+            dinoParts: ['dress', 'gown', 'outfit', 'suit', 'saree', 'lehenga'],
             denoise: 0.55,
             threshold: 0.3,
             dilation: 12,
@@ -391,14 +391,18 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
 
     // ============ CALCULATE FINAL VALUES ============
 
+    // Ensure we don't have a suspiciously low threshold (which causes background/skin bleed)
+    if (minThreshold < 0.25) minThreshold = 0.3;
+
     // If nothing matched at all → smart fallback
     if (matchedRegions.length === 0) {
-        console.log('⚠️ No specific region detected in prompt, defaulting to clothing detection');
-        allDinoParts = ['clothing', 'garment', 'dress', 'shirt'];
-        maxDenoise = 0.55;
+        console.log('⚠️ No specific region detected in prompt, defaulting to specific clothing nouns');
+        // AVOID broad terms like "clothing" or "garment" - they detect the whole person!
+        allDinoParts = ['shirt', 'dress', 'top', 'outfit'];
+        maxDenoise = 0.50;
         maxDilation = 10;
-        minThreshold = 0.22;
-        matchedRegions.push('general_detection');
+        minThreshold = 0.35; // Stricter for fallback to avoid identity change
+        matchedRegions.push('general_fallback');
         isClothingOnly = true;
     }
 
@@ -1157,7 +1161,11 @@ const generateSimpleWorkflow = (params: any) => {
             SET_LATENT_MASK: "14",
             SAMPLER: "11",
             VAE_DECODE: "12",
-            SAVE_IMAGE: "13"
+            SAVE_IMAGE: "13",
+            // Face Protection Nodes
+            FACE_DINO_SAM: "20",
+            FACE_DILATE: "21",
+            MASK_SUBTRACT: "22"
         };
 
         // Use user's selected model, fallback to SDXL base
@@ -1178,7 +1186,6 @@ const generateSimpleWorkflow = (params: any) => {
 
         // SMART PROMPT CLEANING:
         // For clothing changes, strip person descriptors to prevent identity change
-        // "a lady with red t-shirt" → "red t-shirt" (the person is already in the image)
         let cleanedPositive = cleanPrompt(params.prompt || "");
         if (analysis.isClothingOnly) {
             cleanedPositive = stripPersonDescriptors(cleanedPositive);
@@ -1215,6 +1222,7 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: { model_name: "sam_vit_h (2.56GB)" }
         };
 
+        // Primary Clothing/Object Detection
         workflow[ID_AI.DINO_SAM_SEGMENT] = {
             class_type: "GroundingDinoSAMSegment (segment anything)",
             inputs: {
@@ -1226,14 +1234,49 @@ const generateSimpleWorkflow = (params: any) => {
             }
         };
 
+        // EXPLICIT FACE PROTECTION (Identity Lock)
+        // We detect the face/neck/eyes to ensure they are NOT in the mask
+        const maskToPostProcess = (analysis.isClothingOnly) ? [ID_AI.MASK_SUBTRACT, 0] : [ID_AI.DILATE_MASK, 0];
+
+        if (analysis.isClothingOnly) {
+            workflow[ID_AI.FACE_DINO_SAM] = {
+                class_type: "GroundingDinoSAMSegment (segment anything)",
+                inputs: {
+                    prompt: "face . head . neck . glasses",
+                    threshold: 0.3,
+                    grounding_dino_model: [ID_AI.DINO_LOADER, 0],
+                    sam_model: [ID_AI.SAM_LOADER, 0],
+                    image: [ID_AI.LOAD_IMAGE, 0]
+                }
+            };
+
+            workflow[ID_AI.FACE_DILATE] = {
+                class_type: "ImpactDilateMask",
+                inputs: { mask: [ID_AI.FACE_DINO_SAM, 1], dilation: 15 } // Dilate face mask to protect borders
+            };
+
+            workflow[ID_AI.MASK_SUBTRACT] = {
+                class_type: "MaskComposite",
+                inputs: {
+                    destination: [ID_AI.DINO_SAM_SEGMENT, 1],
+                    source: [ID_AI.FACE_DILATE, 0],
+                    x: 0, y: 0,
+                    operation: "subtract"
+                }
+            };
+        }
+
         workflow[ID_AI.DILATE_MASK] = {
             class_type: "ImpactDilateMask",
-            inputs: { mask: [ID_AI.DINO_SAM_SEGMENT, 1], dilation: autoMaskDilation }
+            inputs: {
+                mask: analysis.isClothingOnly ? [ID_AI.MASK_SUBTRACT, 0] : [ID_AI.DINO_SAM_SEGMENT, 1],
+                dilation: autoMaskDilation
+            }
         };
 
-        // Clothing-safe blur: higher sigma for smoother mask edges (prevents hard seams)
-        const blurKernel = analysis.isClothingOnly ? 15 : 9;
-        const blurSigma = analysis.isClothingOnly ? 6 : 4;
+        // Smoothing for natural boundaries
+        const blurKernel = analysis.isClothingOnly ? 21 : 11;
+        const blurSigma = analysis.isClothingOnly ? 8 : 4;
         workflow[ID_AI.BLUR_MASK] = {
             class_type: "ImpactGaussianBlurMask",
             inputs: { mask: [ID_AI.DILATE_MASK, 0], kernel_size: blurKernel, sigma: blurSigma }
@@ -1241,21 +1284,15 @@ const generateSimpleWorkflow = (params: any) => {
 
         workflow[ID_AI.VAE_ENCODE] = {
             class_type: "VAEEncode",
-            inputs: {
-                pixels: [ID_AI.LOAD_IMAGE, 0],
-                vae: [ID_AI.CHECKPOINT, 2]
-            }
+            inputs: { pixels: [ID_AI.LOAD_IMAGE, 0], vae: [ID_AI.CHECKPOINT, 2] }
         };
 
         workflow[ID_AI.SET_LATENT_MASK] = {
             class_type: "SetLatentNoiseMask",
-            inputs: {
-                samples: [ID_AI.VAE_ENCODE, 0],
-                mask: [ID_AI.BLUR_MASK, 0]
-            }
+            inputs: { samples: [ID_AI.VAE_ENCODE, 0], mask: [ID_AI.BLUR_MASK, 0] }
         };
 
-        const cfgForType = analysis.isClothingOnly ? 5.5 : (Number(params.cfg_scale) || 7.0);
+        const cfgForType = analysis.isClothingOnly ? 4.5 : (Number(params.cfg_scale) || 7.0);
 
         workflow[ID_AI.SAMPLER] = {
             class_type: "KSampler",
