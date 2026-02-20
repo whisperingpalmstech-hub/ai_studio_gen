@@ -186,7 +186,8 @@ export default function GenerateVideoPage() {
 
                 // 3. Handle Completion
                 if (update.status === 'completed') {
-                    const firstOutput = Array.isArray(update.outputs) ? update.outputs[0] : null;
+                    // update.outputs is an object: { urls: [], nodeResults: {} } 
+                    const firstOutput = update.outputs?.urls ? update.outputs.urls[0] : (Array.isArray(update.outputs) ? update.outputs[0] : null);
                     if (firstOutput) {
                         setGeneratedImage(`${firstOutput}?t=${Date.now()}`);
                     }

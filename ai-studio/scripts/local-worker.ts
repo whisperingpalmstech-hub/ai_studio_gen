@@ -1504,10 +1504,10 @@ const generateSimpleWorkflow = (params: any) => {
                 latent_image: [ID_VID.SET_LATENT_MASK, 0],
                 seed: params.seed && params.seed !== -1 ? Number(params.seed) : Math.floor(Math.random() * 10000000),
                 steps: 25,
-                cfg: 6.0,
+                cfg: 7.0,
                 sampler_name: "dpmpp_2m",
                 scheduler: "karras",
-                denoise: analysis.isClothingOnly ? 0.60 : 0.70
+                denoise: 0.85 // High denoise ensures the prompt (e.g., color changes) takes effect on the masked area
             }
         };
 
@@ -1802,7 +1802,7 @@ async function processJob(job: any) {
         let completed = false;
         let outputs = null;
         let pollingAttempts = 0;
-        const MAX_POLLING_ATTEMPTS = 300; // 5 minutes approx
+        const MAX_POLLING_ATTEMPTS = 3000; // 50 minutes approx
 
         while (!completed) {
             try {
@@ -1835,7 +1835,9 @@ async function processJob(job: any) {
                     pollingAttempts++;
                     if (pollingAttempts > MAX_POLLING_ATTEMPTS) {
                         ws.close();
-                        throw new Error("Job timed out waiting for ComfyUI history. (Execution might have finished but history was not found)");
+                        const errMsg = "Job timed out waiting for ComfyUI history after 50 minutes.";
+                        console.error(errMsg);
+                        throw new Error(errMsg);
                     }
 
                     if (pollingAttempts % 10 === 0) {
@@ -1845,6 +1847,9 @@ async function processJob(job: any) {
                     await new Promise(r => setTimeout(r, 1000));
                 }
             } catch (e: any) {
+                if (pollingAttempts > MAX_POLLING_ATTEMPTS || e.message.includes("ComfyUI Execution Error")) {
+                    throw e; // Break the while loop by throwing the error up to the job processor
+                }
                 console.log("⚠️ History poll error (retrying):", e.message);
                 await new Promise(r => setTimeout(r, 1000));
             }
