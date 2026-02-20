@@ -19,22 +19,39 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Middleware
+// 1. GLOBAL CORS + PREFLIGHT HANDLER (TOP PRIORITY)
+// This must be the very first middleware to handle Vercel -> Localhost requests
+app.use((req: any, res: any, next) => {
+    const origin = req.headers.origin;
+    console.log(`🌐 CORS Check: ${req.method} from ${origin || 'unknown origin'} to ${req.url}`);
+
+    // Allow any origin that includes vercel.app or localhost
+    if (origin && (origin.includes("vercel.app") || origin.includes("localhost"))) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+    } else {
+        res.setHeader("Access-Control-Allow-Origin", origin || "*");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+    res.setHeader("Access-Control-Allow-Headers", "*"); // Allow all headers
+    res.setHeader("Access-Control-Expose-Headers", "*");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Max-Age", "86400"); // Cache preflight for 24h
+
+    // Handle Preflight
+    if (req.method === "OPTIONS") {
+        return res.status(204).send();
+    }
+    next();
+});
+
+// 2. Security & Utilities
 app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
-app.use(cors({
-    origin: (origin, callback) => callback(null, true), // Allow everything in dev
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["*"], // Support all headers including custom auth
-    exposedHeaders: ["*"],
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false,
 }));
 app.use(morgan("dev"));
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 // Static files
 app.use("/outputs", express.static("public"));

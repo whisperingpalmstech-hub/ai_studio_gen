@@ -20,7 +20,11 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         // Enterprise: Use UUID for the filename to prevent any collisions
-        const ext = path.extname(file.originalname) || ".png";
+        // BUG FIX: Detect extension from original filename instead of defaulting
+        const originalExt = path.extname(file.originalname);
+        const fallbackExt = file.mimetype.startsWith("video/") ? ".mp4" : ".png";
+        const ext = originalExt || fallbackExt;
+
         const jobId = req.body.jobId || uuidv4();
         const filename = `${jobId}${ext}`;
         cb(null, filename);
