@@ -1427,24 +1427,33 @@ const generateSimpleWorkflow = (params: any) => {
         const isSDXL = params.model_id?.toLowerCase().includes('xl') || params.model_id?.toLowerCase().includes('base_1.0');
         const motionModel = isSDXL ? "mm_sdxl_v10_beta.safetensors" : "mm_sd_v15_v2.ckpt";
 
-        // AnimateDiff for temporal stability during inpainting
+        // AnimateDiff Gen2 Chain for high stability
         workflow[ID_VID.AD_LOADER] = {
-            class_type: "ADE_AnimateDiffLoader",
+            class_type: "ADE_LoadAnimateDiffModel",
             inputs: { model_name: motionModel }
         };
 
         workflow[ID_VID.AD_APPLY] = {
-            class_type: "ADE_AnimateDiffApply",
+            class_type: "ADE_ApplyAnimateDiffModelSimple",
+            inputs: {
+                motion_model: [ID_VID.AD_LOADER, 0]
+            }
+        };
+
+        const ID_EVOLVED = "17"; // Bridge node for Gen2 evolved
+        workflow[ID_EVOLVED] = {
+            class_type: "ADE_UseEvolvedSampling",
             inputs: {
                 model: [ID_VID.CHECKPOINT, 0],
-                m_models: [ID_VID.AD_LOADER, 0]
+                m_models: [ID_VID.AD_APPLY, 0],
+                beta_schedule: "autoselect"
             }
         };
 
         workflow[ID_VID.SAMPLER] = {
             class_type: "KSampler",
             inputs: {
-                model: [ID_VID.AD_APPLY, 0],
+                model: [ID_EVOLVED, 0],
                 positive: [ID_VID.PROMPT_POS, 0],
                 negative: [ID_VID.PROMPT_NEG, 0],
                 latent_image: [ID_VID.SET_LATENT_MASK, 0],
