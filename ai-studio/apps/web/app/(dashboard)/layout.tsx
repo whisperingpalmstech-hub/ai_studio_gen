@@ -121,35 +121,35 @@ export default function DashboardLayout({
 
             {/* Top Language Toggle */}
             <div style={{ padding: "0 1rem 1rem", borderBottom: "1px solid rgba(255, 255, 255, 0.06)" }}>
-                <div style={{
-                    display: 'flex',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: '0.75rem',
-                    padding: '0.25rem',
-                    border: '1px solid rgba(255, 255, 255, 0.05)'
-                }}>
-                    {(['en', 'hi', 'mr'] as const).map((lang) => (
-                        <button
-                            key={lang}
-                            onClick={() => setLanguage(lang)}
-                            style={{
-                                flex: 1,
-                                padding: '0.5rem',
-                                borderRadius: '0.625rem',
-                                border: 'none',
-                                background: language === lang ? 'linear-gradient(135deg, #6366f1, #a855f7)' : 'transparent',
-                                color: language === lang ? 'white' : '#9ca3af',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                boxShadow: language === lang ? '0 4px 12px rgba(99, 102, 241, 0.3)' : 'none'
-                            }}
-                        >
-                            {lang === 'en' ? 'EN' : lang === 'hi' ? 'HI' : 'MR'}
-                        </button>
-                    ))}
-                </div>
+                <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as any)}
+                    style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        borderRadius: '0.625rem',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        color: 'white',
+                        fontSize: '0.875rem',
+                        outline: 'none',
+                        cursor: 'pointer'
+                    }}
+                >
+                    <option value="en" style={{ color: 'white', background: '#0f0f23' }}>English (EN)</option>
+                    <option value="hi" style={{ color: 'white', background: '#0f0f23' }}>Hindi (HI)</option>
+                    <option value="mr" style={{ color: 'white', background: '#0f0f23' }}>Marathi (MR)</option>
+                    <option value="es" style={{ color: 'white', background: '#0f0f23' }}>Spanish (ES)</option>
+                    <option value="fr" style={{ color: 'white', background: '#0f0f23' }}>French (FR)</option>
+                    <option value="de" style={{ color: 'white', background: '#0f0f23' }}>German (DE)</option>
+                    <option value="zh" style={{ color: 'white', background: '#0f0f23' }}>Chinese (ZH)</option>
+                    <option value="ja" style={{ color: 'white', background: '#0f0f23' }}>Japanese (JA)</option>
+                    <option value="ar" style={{ color: 'white', background: '#0f0f23' }}>Arabic (AR)</option>
+                    <option value="ru" style={{ color: 'white', background: '#0f0f23' }}>Russian (RU)</option>
+                    <option value="pt" style={{ color: 'white', background: '#0f0f23' }}>Portuguese (PT)</option>
+                    <option value="it" style={{ color: 'white', background: '#0f0f23' }}>Italian (IT)</option>
+                    <option value="ko" style={{ color: 'white', background: '#0f0f23' }}>Korean (KO)</option>
+                </select>
             </div>
 
             {/* Quick Action */}
@@ -370,35 +370,36 @@ export default function DashboardLayout({
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         {/* Mobile Language Toggle */}
-                        <div style={{
-                            display: 'flex',
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            borderRadius: '0.5rem',
-                            padding: '0.125rem',
-                            border: '1px solid rgba(255, 255, 255, 0.1)'
-                        }}>
-                            {(['en', 'hi', 'mr'] as const).map((lang) => (
-                                <button
-                                    key={lang}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setLanguage(lang);
-                                    }}
-                                    style={{
-                                        padding: '0.25rem 0.5rem',
-                                        borderRadius: '0.375rem',
-                                        border: 'none',
-                                        background: language === lang ? 'linear-gradient(135deg, #6366f1, #a855f7)' : 'transparent',
-                                        color: language === lang ? 'white' : '#9ca3af',
-                                        fontSize: '0.625rem',
-                                        fontWeight: 700,
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    {lang.toUpperCase()}
-                                </button>
-                            ))}
-                        </div>
+                        <select
+                            value={language}
+                            onChange={(e) => {
+                                e.stopPropagation();
+                                setLanguage(e.target.value as any);
+                            }}
+                            style={{
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '0.5rem',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                color: 'white',
+                                fontSize: '0.75rem',
+                                outline: 'none',
+                            }}
+                        >
+                            <option value="en" style={{ color: 'white', background: '#0f0f23' }}>EN</option>
+                            <option value="hi" style={{ color: 'white', background: '#0f0f23' }}>HI</option>
+                            <option value="mr" style={{ color: 'white', background: '#0f0f23' }}>MR</option>
+                            <option value="es" style={{ color: 'white', background: '#0f0f23' }}>ES</option>
+                            <option value="fr" style={{ color: 'white', background: '#0f0f23' }}>FR</option>
+                            <option value="de" style={{ color: 'white', background: '#0f0f23' }}>DE</option>
+                            <option value="zh" style={{ color: 'white', background: '#0f0f23' }}>ZH</option>
+                            <option value="ja" style={{ color: 'white', background: '#0f0f23' }}>JA</option>
+                            <option value="ar" style={{ color: 'white', background: '#0f0f23' }}>AR</option>
+                            <option value="ru" style={{ color: 'white', background: '#0f0f23' }}>RU</option>
+                            <option value="pt" style={{ color: 'white', background: '#0f0f23' }}>PT</option>
+                            <option value="it" style={{ color: 'white', background: '#0f0f23' }}>IT</option>
+                            <option value="ko" style={{ color: 'white', background: '#0f0f23' }}>KO</option>
+                        </select>
 
                         {/* Mobile credit badge */}
                         <div style={{

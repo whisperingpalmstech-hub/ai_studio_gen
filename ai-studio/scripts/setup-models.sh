@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-COMFY_DIR="/home/sujeetnew/Downloads/Ai-Studio/Ai-Studio-/ComfyUI"
+COMFY_DIR="/media/sujeetnew/4TB HDD/AiModels/ComfyUI"
 SUPABASE_URL="https://zdpkjrbkgjflnqmdsxky.supabase.co"
 SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkcGtqcmJrZ2pmbG5xbWRzeGt5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDI3OTUwMSwiZXhwIjoyMDg1ODU1NTAxfQ.t9bzLYUSEgzzJZiY1a0nPo4WjfPO6IM-c-OI6WdnYwA"
 

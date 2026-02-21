@@ -1,0 +1,296 @@
+import fs from 'fs';
+
+const en = {
+    cinematicVideo: "Cinematic Video",
+    studioActive: "Studio Active",
+    connecting: "Connecting...",
+    studioOffline: "Studio Offline",
+    produceHollywood: "Produce Hollywood-grade cinematic motion using the state-of-the-art Wan 2.1 engine.",
+    creditsLeft: "Credits left",
+    cost: "Cost",
+    t2v: "Text to Video",
+    i2v: "Image to Video",
+    video_inpaint: "Video Auto-Mask",
+    uploadBaseVideo: "Upload Base Video",
+    uploadImageRef: "Upload image for reference",
+    whatToHide: "What to Hide/Mask?",
+    hideMaskPlaceholder: "Describe what the AI should find and mask... e.g., 'the person's red shirt', 'the car in background'",
+    smartAiDesc: "Smart AI detection will automatically find and mask these objects across all frames.",
+    refinementPrompt: "Refinement / Inpaint Prompt",
+    motionPrompt: "Motion Prompt",
+    refinePlaceholder: "What to put in the masked area? e.g., 'a blue denium jacket', 'a futuristic electric car'",
+    motionPlaceholder: "Describe the action and atmosphere... e.g., 'A high-speed chase through a neon-drenched futuristic city...'",
+    tokensUsed: "tokens used",
+    refineWithAi: "Refine with AI",
+    aspectRatio: "Aspect Ratio",
+    durationFps: "Duration & FPS",
+    standard5s: "Standard (5s)",
+    extended7s: "Extended (7.5s)",
+    snapshot2s: "Snapshot (2.5s)",
+    cinematic16: "Cinematic (16 FPS)",
+    smooth24: "Smooth (24 FPS)",
+    fluid30: "Fluid (30 FPS)",
+    startProduction: "Start Production",
+    stopResetUI: "Stop & Reset Production UI",
+    cinemaOutput: "Cinema Output",
+    stageEmpty: "Stage is empty. Start production to see magic.",
+    calculatingMotion: "Calculating Motion Vectors...",
+    temporalFrame: "Temporal Frame Synthesis",
+    productionMetadata: "Production Metadata",
+    format: "Format:",
+    engine: "Engine:",
+    resolution: "Resolution:",
+    frames: "Frames:",
+    studioArchives: "Studio Archives",
+    pastGenerations: "Your past cinematic generations",
+    browseAll: "Browse All",
+    navDashboard: "Dashboard",
+    navGenerate: "Generate",
+    navGenerateVideo: "Generate Video",
+    navGallery: "Gallery",
+    navWorkflows: "Workflows",
+    navModels: "Models",
+    navApiDocs: "API Docs",
+    navSettings: "Settings",
+    enterprise: "Enterprise",
+    newGeneration: "New Generation",
+    workspace: "WORKSPACE",
+    developer: "DEVELOPER",
+    credits: "Credits",
+    proPlan: "Pro Plan • 1,000/mo",
+    enterpriseUnlimited: "Enterprise • Unlimited",
+    freeTier: "Free tier • 100/mo",
+    managePlan: "Manage Plan",
+    upgradePlan: "Upgrade Plan",
+    uiLang: "UI Lang:",
+    user: "User",
+    pro: "Pro",
+    free: "Free",
+    welcomeBack: "Welcome back!",
+    whatsHappening: "Here's what's happening with your AI creations.",
+    totalGens: "Total Generations",
+    keepCreating: "Keep creating!",
+    workflowsCreated: "Workflows Created",
+    greatStart: "Great start",
+    tryEditor: "Try the editor",
+    creditsRemaining: "Credits Remaining",
+    resetsIn30: "Resets in 30 days",
+    timeSaved: "Time Saved",
+    vsManual: "vs manual creation",
+    textToImage: "Text to Image",
+    genFromPrompt: "Generate images from text prompts",
+    startGenerating: "Start generating",
+    workflowEditorAlt: "Workflow Editor",
+    buildComplex: "Build complex generation pipelines",
+    createWorkflow: "Create workflow",
+    exploreModels: "Explore Models",
+    browseCheckpoints: "Browse checkpoints, LoRAs & more",
+    browseModels: "Browse models",
+    recentGens: "Recent Generations",
+    viewAll: "View all",
+    noGensYet: "No generations yet",
+    startCreatingArt: "Start creating amazing AI art by describing what you want to see.",
+    createFirstImg: "Create Your First Image",
+    galleryTitle: "Gallery",
+    manageImages: "Browse and manage your AI-generated images",
+    searchPrompt: "Search by prompt...",
+    filter: "Filter",
+    startCreatingImages: "Start creating amazing images with AI",
+    genFirstImage: "Generate Your First Image",
+    noPromptAvail: "No prompt available",
+    genDetails: "Generation Details",
+    promptLabel: "PROMPT",
+    negPromptLabel: "NEGATIVE PROMPT",
+    sizeLabel: "SIZE",
+    stepsLabel: "STEPS",
+    cfgScaleLabel: "CFG SCALE",
+    seedLabel: "SEED",
+    downloadLabel: "Download",
+    deleteLabel: "Delete",
+    confirmDelTitle: "Confirm Deletion",
+    confirmDelMsg: "Are you sure you want to permanently delete this generation? This action will remove the image/video from storage and cannot be undone.",
+    cancel: "Cancel",
+    delPermanently: "Delete Permanently",
+    workflowTitle: "Workflows",
+    workflowDesc: "Build, manage, and execute your AI pipelines",
+    newWorkflow: "New Workflow",
+    quickStartTemplates: "Quick Start Templates",
+    useTemplate: "Use Template",
+    myWorkflows: "My Workflows",
+    createWorkflowStartFromScratch: "Start from scratch with the node editor",
+    nodesLabel: "nodes",
+    updatedDateLabel: "Updated",
+    editLabel: "Edit",
+    modelsHub: "Models Hub",
+    modelsDesc: "Explore and manage checkpoints and LoRAs",
+    uploadModel: "Upload Model",
+    searchModels: "Search models...",
+    allTypes: "All Types",
+    checkpoint: "Checkpoint",
+    lora: "LoRA",
+    vae: "VAE",
+    addedBy: "Added by",
+    modelName: "Model Name",
+    modelUrlDesc: "HuggingFace URL or direct link",
+    descriptionLabel: "Description",
+    addModel: "Add Model",
+    adding: "Adding...",
+    txt2img: "Text to Image",
+    img2img: "Image to Image",
+    inpaintMode: "AI Smart Inpaint",
+    upscaleMode: "Upscale",
+    generationSettings: "Generation Settings",
+    promptLabelUI: "Positive Prompt",
+    promptOptionalTitle: "(Optional for detail)",
+    negativePromptLabel: "Negative Prompt",
+    baseImageTitle: "Base Image",
+    uploadBaseImg: "Upload base image",
+    dragDropOrig: "Click or drag your original image here",
+    maskImageTitle: "Mask Image",
+    uploadMaskImg: "Upload mask image",
+    dragDropMask: "Click or drag your mask image here (White = area to change)",
+    selectMaskingMethod: "Select Masking Method",
+    autoMaskMethod: "Auto-Mask (AI Detection)",
+    manualMaskMethod: "Manual Mask Upload",
+    whatToChangeLabel: "What to change?",
+    describeChangePlaceholder: "e.g. 'the person's red shirt', 'the car in background'",
+    aspectRatioTitle: "Aspect Ratio",
+    advancedSettingsTitle: "Advanced Settings",
+    stepsTitle: "Steps",
+    cfgScaleTitle: "CFG Scale",
+    seedTitle: "Seed",
+    randomTitle: "Random",
+    samplerTitle: "Sampler",
+    baseModelTitle: "Base Model",
+    generateButtonLabel: "Generate Image",
+    generatingButtonLabel: "Generating...",
+    stopResetUILabel: "Stop & Reset UI",
+    apiDocsTitle: "API Documentation",
+    apiDocsDesc: "Integrate AI Studio into your applications",
+    authentication: "Authentication",
+    authDesc: "All API requests require authentication using an API key. Include the key in the x-api-key header. You can also use a Supabase JWT Bearer token for user-scoped access.",
+    baseUrl: "Base URL",
+    versionStable: "v1 Stable",
+    quickStart3Step: "Quick Start: 3-Step Workflow",
+    quickStartDesc: "Every generation follows this pattern: Upload → Create Job → Poll Result",
+    step1Title: "Upload Image",
+    step2Title: "Create Job",
+    step3Title: "Get Result",
+    endpoints: "Endpoints",
+    jobTypesCosts: "Job Types & Credit Costs",
+    typeCol: "Type",
+    descCol: "Description",
+    creditsCol: "Credits",
+    integrationExamples: "Integration Examples",
+    rateLimitsTierInfo: "Rate Limits & Tier Info",
+    maxRes: "Max Res",
+    concurrentJobs: "Jobs",
+    copied: "Copied!",
+    copy: "Copy",
+    parameters: "Parameters",
+    example: "Example",
+    response: "Response",
+    typeLabel: "Type",
+    requiredLabel: "Required",
+    descLabel: "Description",
+    requiredTag: "Required",
+    optionalTag: "Optional",
+    settingsTitle: "Settings",
+    settingsDesc: "Manage your account, API keys, and preferences",
+    profileTab: "Profile",
+    billingTab: "Billing & Plans",
+    apiKeysTab: "API Keys",
+    notificationsTab: "Notifications",
+    securityTab: "Security",
+    profileInfo: "Profile Information",
+    profileNameLabel: "Name",
+    emailLabel: "Email",
+    saveChanges: "Save Changes",
+    availableCredits: "Available Credits",
+    usage: "Usage",
+    subscriptionPlans: "Subscription Plans",
+    currentPlan: "Current Plan",
+    upgrade: "Upgrade",
+    generateKey: "Generate Key",
+    keysUsed: "Keys Used",
+    noApiKeysYet: "No API Keys Yet",
+    generateFirstKey: "Generate Your First Key",
+    quickStart: "Quick Start",
+    notificationPrefs: "Notification Preferences",
+    securitySettings: "Security Settings",
+    changePassword: "Change Password",
+    updatePassword: "Update Password",
+    dangerZone: "Danger Zone",
+    signOut: "Sign Out",
+    deleteAccount: "Delete Account",
+    nodeLibrary: "Node Library",
+    dragClickNodes: "Drag or click to add nodes",
+    searchNodes: "Search nodes...",
+    save: "Save",
+    saved: "Saved!",
+    queuePrompt: "Queue Prompt",
+    runningNode: "Running: Node",
+    processing: "Processing...",
+    untitledWorkflow: "Untitled Workflow",
+    workflowQueued: "Workflow Queued",
+    workflowCompleted: "Workflow completed successfully!",
+    executionError: "Execution Error"
+};
+
+const langs = ['de', 'zh-CN', 'ja', 'ar', 'ru', 'pt', 'it', 'ko'];
+
+async function translateText(text, targetLang) {
+    if (!text || typeof text !== 'string') return text;
+    try {
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.log("Response not OK", await response.text());
+            return text;
+        }
+        const data = await response.json();
+        let translatedText = '';
+        if (data && data[0]) {
+            data[0].forEach(segment => {
+                if (segment[0]) translatedText += segment[0];
+            });
+        }
+        return translatedText || text;
+    } catch (e) {
+        console.log("Error translating:", text, targetLang, e.message);
+        return text;
+    }
+}
+
+async function main() {
+    let output = '';
+
+    // Process concurrently for speed!
+    for (const lang of langs) {
+        console.log(`Translating ${lang}...`);
+        const keys = Object.keys(en);
+
+        // Translate in parallel chunks
+        const translatedObj = {};
+
+        const promises = keys.map(async (key) => {
+            const t = await translateText(en[key], lang);
+            translatedObj[key] = t;
+        });
+
+        await Promise.all(promises);
+
+        const outLang = lang === 'zh-CN' ? 'zh' : lang;
+        output += `    ${outLang}: {\n`;
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            output += `        ${key}: ${JSON.stringify(translatedObj[key])}`;
+            if (i < keys.length - 1) output += ',\n';
+            else output += '\n';
+        }
+        output += `    } as any,\n`;
+    }
+    fs.writeFileSync('translated.txt', output);
+    console.log("Done");
+}
+main();

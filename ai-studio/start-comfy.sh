@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-COMFY_DIR="/home/sujeetnew/Downloads/Ai-Studio/Ai-Studio-/ComfyUI"
+COMFY_DIR="/media/sujeetnew/4TB HDD/AiModels/ComfyUI"
 VENV_PATH="$COMFY_DIR/venv"
 
 echo "🚀 Starting ComfyUI..."

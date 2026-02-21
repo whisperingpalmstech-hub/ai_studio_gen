@@ -15,7 +15,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const COMFYUI_URL = process.env.COMFYUI_URL || 'http://127.0.0.1:8188';
 
 // Enterprise Grade: Absolute path to ComfyUI input folder
-const COMFYUI_INPUT_DIR = '/home/sujeetnew/Downloads/Ai-Studio/Ai-Studio-/ComfyUI/input';
+const COMFYUI_INPUT_DIR = '/media/sujeetnew/4TB HDD/AiModels/ComfyUI/input';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("❌ Missing Supabase configuration. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.");
@@ -557,6 +557,12 @@ async function syncWorkflowAssets(nodes: ReactFlowNode[]) {
                 node.data.mask_filename = maskFilename; // Store for lookup
             }
         } else if (node.type === 'loadVideo') {
+            let vidPreview = 'undefined';
+            if (node.data.video) {
+                vidPreview = typeof node.data.video === 'string' ? node.data.video.substring(0, 40) + '...' : typeof node.data.video;
+            }
+            console.log(`[DEBUG] syncWorkflowAssets node ${node.id}: filename=${node.data.filename}, videoStart=${vidPreview}`);
+
             if (node.data.video && typeof node.data.video === 'string' && node.data.video.startsWith('data:')) {
                 // The browser FileReader might generate data:video/mp4;base64 or data:application/...
                 let ext = 'mp4';
@@ -571,9 +577,7 @@ async function syncWorkflowAssets(nodes: ReactFlowNode[]) {
                 node.data.video = filename;
                 node.data.filename = filename;
             } else if (node.data.filename) {
-                // If it already has a filename and wasn't uploaded via base64, assume it's an existing valid file OR the template's dummy file
-                // If the dummy file doesn't exist on the server, loading will fail. We rely on the user to upload a video.
-                console.log(`📡 Workflow Sync: Node ${node.id} provided filename: ${node.data.filename}`);
+                console.log(`📡 Workflow Sync: Node ${node.id} provided filename: ${node.data.filename}, but no valid base64 video was attached or parsed!`);
             }
         }
     }

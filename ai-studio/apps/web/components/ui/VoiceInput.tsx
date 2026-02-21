@@ -12,8 +12,18 @@ interface VoiceInputProps {
 
 const LANGUAGES = [
     { code: 'en-US', label: 'English' },
-    { code: 'hi-IN', label: 'Hindi (हिन्दी)' },
-    { code: 'mr-IN', label: 'Marathi (मराठी)' },
+    { code: 'hi-IN', label: 'Hindi' },
+    { code: 'mr-IN', label: 'Marathi' },
+    { code: 'es-ES', label: 'Spanish' },
+    { code: 'fr-FR', label: 'French' },
+    { code: 'de-DE', label: 'German' },
+    { code: 'zh-CN', label: 'Chinese' },
+    { code: 'ja-JP', label: 'Japanese' },
+    { code: 'ar-SA', label: 'Arabic' },
+    { code: 'ru-RU', label: 'Russian' },
+    { code: 'pt-PT', label: 'Portuguese' },
+    { code: 'it-IT', label: 'Italian' },
+    { code: 'ko-KR', label: 'Korean' },
 ];
 
 export function VoiceInput({ onTranscript, className = '', placeholderMode = false }: VoiceInputProps) {
@@ -49,14 +59,34 @@ export function VoiceInput({ onTranscript, className = '', placeholderMode = fal
         // Sync local voice lang to global UI lang
         if (globalLanguage === 'hi') setLocalVoiceLang('hi-IN');
         else if (globalLanguage === 'mr') setLocalVoiceLang('mr-IN');
-        else if (globalLanguage === 'en') setLocalVoiceLang('en-US');
+        else if (globalLanguage === 'es') setLocalVoiceLang('es-ES');
+        else if (globalLanguage === 'fr') setLocalVoiceLang('fr-FR');
+        else if (globalLanguage === 'de') setLocalVoiceLang('de-DE');
+        else if (globalLanguage === 'zh') setLocalVoiceLang('zh-CN');
+        else if (globalLanguage === 'ja') setLocalVoiceLang('ja-JP');
+        else if (globalLanguage === 'ar') setLocalVoiceLang('ar-SA');
+        else if (globalLanguage === 'ru') setLocalVoiceLang('ru-RU');
+        else if (globalLanguage === 'pt') setLocalVoiceLang('pt-PT');
+        else if (globalLanguage === 'it') setLocalVoiceLang('it-IT');
+        else if (globalLanguage === 'ko') setLocalVoiceLang('ko-KR');
+        else setLocalVoiceLang('en-US');
     }, [globalLanguage]);
 
     const handleVoiceLangChange = (code: string) => {
         setLocalVoiceLang(code);
         if (code === 'hi-IN') setGlobalLanguage('hi');
         else if (code === 'mr-IN') setGlobalLanguage('mr');
-        else if (code === 'en-US') setGlobalLanguage('en');
+        else if (code === 'es-ES') setGlobalLanguage('es');
+        else if (code === 'fr-FR') setGlobalLanguage('fr');
+        else if (code === 'de-DE') setGlobalLanguage('de');
+        else if (code === 'zh-CN') setGlobalLanguage('zh');
+        else if (code === 'ja-JP') setGlobalLanguage('ja');
+        else if (code === 'ar-SA') setGlobalLanguage('ar');
+        else if (code === 'ru-RU') setGlobalLanguage('ru');
+        else if (code === 'pt-PT') setGlobalLanguage('pt');
+        else if (code === 'it-IT') setGlobalLanguage('it');
+        else if (code === 'ko-KR') setGlobalLanguage('ko');
+        else setGlobalLanguage('en');
     };
 
     const toggleListen = () => {
