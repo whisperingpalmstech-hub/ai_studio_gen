@@ -117,7 +117,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = '', use
                 'jersey', 'tunic', 'pullover', 'windbreaker', 'parka', 'fleece'],
             // SPECIFIC DETECTION: Avoid "clothing/garment" as it often detects the whole person.
             dinoParts: ['shirt', 'top', 'jacket', 'sweater'],
-            denoise: 0.75, // Increased denoise for significant changes
+            denoise: 0.55, // Regulated for stability
             threshold: 0.35, // Higher threshold for better isolation
             dilation: 10,
             negatives: 'wrong neckline, mismatched sleeves',
@@ -128,7 +128,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = '', use
                 'chinos', 'joggers', 'cargo pants', 'culottes', 'palazzo', 'flares', 'capri',
                 'bermuda', 'sweatpants', 'track pants', 'dhoti'],
             dinoParts: ['pants', 'trousers', 'jeans', 'skirt'],
-            denoise: 0.70, // Increased denoise
+            denoise: 0.55, // Regulated for stability
             threshold: 0.35,
             dilation: 10,
             negatives: 'wrong leg shape',
@@ -141,7 +141,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = '', use
                 'wardrobe', 'frock', 'anarkali', 'churidar', 'sharara', 'ghagra', 'kaftan',
                 'abaya', 'kimono', 'hanbok', 'overalls', 'bodysuit', 'onesie'],
             dinoParts: ['dress', 'gown', 'outfit', 'suit', 'saree', 'lehenga'],
-            denoise: 0.75, // Increased denoise so complete clothing changes like shape/color apply properly
+            denoise: 0.60, // Regulated for stability
             threshold: 0.3,
             dilation: 12,
             negatives: 'previous clothing visible, mixed outfit styles, old garment showing',
@@ -1326,11 +1326,8 @@ const generateSimpleWorkflow = (params: any) => {
         const analysis = analyzeInpaintPrompt(params.prompt || '', params.negative_prompt || '', params.mask_prompt);
         const dinoPrompt = params._dino_prompt_override || analysis.dinoPrompt;
         // Use the smart analyzer's denoise. For clothing changes, cap at 0.60
-        // to allow dramatic outfit changes (e.g., saree → jacket) while still
-        // preserving identity. Too low (0.40) = nothing changes!
-        // Increased limit for clothing (0.75) to allow color/texture changes while 
-        // preserving identity. Too low (0.40) = nothing changes!
-        const maxDenoiseForType = analysis.isClothingOnly ? 0.75 : 0.85;
+        // Stabilized to 0.55 to prevent warping the structure of the person while generating
+        const maxDenoiseForType = analysis.isClothingOnly ? 0.55 : 0.85;
         const autoDenoise = Math.min(analysis.denoise, maxDenoiseForType);
         const autoThreshold = analysis.dinoThreshold;
         const autoMaskDilation = analysis.maskDilation;

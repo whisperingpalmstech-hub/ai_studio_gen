@@ -911,7 +911,7 @@ export default function GeneratePage() {
                     )}
 
                     {/* Mask Upload (for Inpaint) */}
-                    {mode === "inpaint" && (
+                    {false && mode === "inpaint" && (
                         <div style={cardStyle}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                                 <label style={{ ...labelStyle, marginBottom: 0 }}>
