@@ -432,7 +432,8 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = '', use
 
     // ============ CALCULATE FINAL VALUES ============
     // Ensure we don't have a suspiciously low threshold (which causes background/skin bleed)
-    if (minThreshold < 0.25) minThreshold = 0.3;
+    // Removed 0.3 override to allow specific low-threshold regions like background to work better
+    if (minThreshold < 0.1) minThreshold = 0.15;
 
     // If nothing matched at all → smart fallback
     if (matchedRegions.length === 0) {
@@ -1328,7 +1329,9 @@ const generateSimpleWorkflow = (params: any) => {
         // Use the smart analyzer's denoise. For clothing changes, cap at 0.60
         // to allow dramatic outfit changes (e.g., saree → jacket) while still
         // preserving identity. Too low (0.40) = nothing changes!
-        const maxDenoiseForType = analysis.isClothingOnly ? 0.60 : 0.70;
+        // Increased limit for clothing (0.75) to allow color/texture changes while 
+        // preserving identity. Too low (0.40) = nothing changes!
+        const maxDenoiseForType = analysis.isClothingOnly ? 0.75 : 0.85;
         const autoDenoise = Math.min(analysis.denoise, maxDenoiseForType);
         const autoThreshold = analysis.dinoThreshold;
         const autoMaskDilation = analysis.maskDilation;
@@ -1424,7 +1427,7 @@ const generateSimpleWorkflow = (params: any) => {
 
         workflow[ID_AI.SAM_LOADER] = {
             class_type: "SAMModelLoader (segment anything)",
-            inputs: { model_name: "sam_vit_h (2.56GB)" }
+            inputs: { model_name: "sam_vit_b (375MB)" } // Switched to vit_b for 8GB VRAM cards
         };
 
         // Primary Clothing/Object Detection
@@ -1501,8 +1504,12 @@ const generateSimpleWorkflow = (params: any) => {
         };
 
         workflow[ID_AI.VAE_ENCODE] = {
-            class_type: "VAEEncode",
-            inputs: { pixels: [ID_AI.LOAD_IMAGE, 0], vae: [ID_AI.CHECKPOINT, 2] }
+            class_type: "VAEEncodeTiled",
+            inputs: {
+                pixels: [ID_AI.LOAD_IMAGE, 0],
+                vae: [ID_AI.CHECKPOINT, 2],
+                tile_size: 512
+            }
         };
 
         workflow[ID_AI.SET_LATENT_MASK] = {
@@ -1530,8 +1537,12 @@ const generateSimpleWorkflow = (params: any) => {
         };
 
         workflow[ID_AI.VAE_DECODE] = {
-            class_type: "VAEDecode",
-            inputs: { samples: [ID_AI.SAMPLER, 0], vae: [ID_AI.CHECKPOINT, 2] }
+            class_type: "VAEDecodeTiled",
+            inputs: {
+                samples: [ID_AI.SAMPLER, 0],
+                vae: [ID_AI.CHECKPOINT, 2],
+                tile_size: 512
+            }
         };
 
         workflow[ID_AI.SAVE_IMAGE] = {
