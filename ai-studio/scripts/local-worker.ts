@@ -88,6 +88,7 @@ interface InpaintAnalysis {
     negativeAdditions: string; // Auto-added negative prompt terms
     changeType: string;       // For logging (comma-separated if multiple)
     isClothingOnly: boolean;  // Whether this is a clothing-only change (identity preservation)
+    invertDino?: boolean;     // Whether to INVERT the primary mask (used for background changing)
 }
 
 function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): InpaintAnalysis {
@@ -429,17 +430,38 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         isClothingOnly = true;
     }
 
-    // Multi-region adjustments — but be conservative for clothing
-    if (matchedRegions.length > 1) {
-        if (isClothingOnly) {
-            // Clothing-only multi-region: moderate denoise to allow change while preserving identity
-            maxDenoise = Math.min(maxDenoise + 0.05, 0.80);
-            maxDilation = Math.min(maxDilation + 4, 14);
-            console.log(`🔀 Multi-region CLOTHING change: ${matchedRegions.join(' + ')} (identity-safe mode)`);
+    let invertDino = false;
+
+    // ============ UNIVERSAL BACKGROUND OVERRIDE ============
+    // DINO is terrible at detecting "background". The best way to mask a background
+    // is to map the subject (or face) and INVERT the mask!
+    if (matchedRegions.includes('background') || extractedObjects.some(t => t.includes('background') || t.includes('scenery') || t.includes('indoor'))) {
+        console.log(`🌍 Background change detected! Engaging Inverse-Masking Strategy.`);
+
+        // Did they ALSO want to change clothes?
+        const wantsClothingChange = extractedObjects.some(o => o.includes('suit') || o.includes('armor') || o.includes('shirt') || o.includes('dress') || o.includes('clothes')) ||
+            matchedRegions.some(r => r !== 'background' && r !== 'general_fallback');
+
+        if (wantsClothingChange) {
+            // They want to change BOTH background and clothes. 
+            // We find ONLY the face, and invert it. This masks EVERYTHING EXCEPT THE FACE.
+            allDinoParts = ["face", "head", "neck"];
+            invertDino = true;
+            isClothingOnly = false;
+            maxDenoise = 1.0; // 100% denoise to completely destroy the original background/suit pixels
+            maxDilation = 5; // Slight dilation for face protection
+            minThreshold = 0.25;
+            console.log(`   -> Target: Background + Clothing (Inverting Face Mask)`);
         } else {
-            maxDenoise = Math.min(maxDenoise + 0.05, 0.8);
-            maxDilation = Math.min(maxDilation + 5, 35);
-            console.log(`🔀 Multi-region change detected: ${matchedRegions.join(' + ')}`);
+            // They want to change the background, but KEEP their current clothes.
+            // We find the PERSON, and invert it. This protects the face AND the clothes.
+            allDinoParts = ["person", "human", "clothing"];
+            invertDino = true;
+            isClothingOnly = false;
+            maxDenoise = 1.0; // 100% denoise for the background
+            maxDilation = 10;
+            minThreshold = 0.25;
+            console.log(`   -> Target: Background ONLY (Inverting Person Mask)`);
         }
     }
 
@@ -463,7 +485,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
     console.log(`   Negative Prompt: "${userNegative.substring(0, 80)}${userNegative.length > 80 ? '...' : ''}"`);
     console.log(`   Matched Regions: [${matchedRegions.join(', ')}]`);
     console.log(`   Extracted Negative Objects: [${extractedObjects.join(', ')}]`);
-    console.log(`   Clothing Only: ${isClothingOnly}`);
+    console.log(`   Clothing Only: ${isClothingOnly} | Invert Mask: ${invertDino}`);
     console.log(`   DINO Prompt: "${dinoPrompt}"`);
     console.log(`   Denoise: ${maxDenoise}`);
     console.log(`   DINO Threshold: ${minThreshold}`);
@@ -1354,9 +1376,22 @@ const generateSimpleWorkflow = (params: any) => {
             }
         };
 
+        const ID_INVERT = "1899"; // Unique ID for inversion if needed
+        let primaryMaskNodeContext = [ID_AI.DINO_SAM_SEGMENT, 1];
+
+        if (analysis.invertDino) {
+            console.log("   -> Injecting InvertMask node for background replacement strategy");
+            workflow[ID_INVERT] = {
+                class_type: "InvertMask",
+                inputs: { mask: primaryMaskNodeContext }
+            };
+            primaryMaskNodeContext = [ID_INVERT, 0];
+        }
+
         // EXPLICIT FACE PROTECTION (Identity Lock)
-        // We detect the face/neck/eyes to ensure they are NOT in the mask
-        const protectFace = !analysis.changeType.includes('face') && !analysis.changeType.includes('makeup') && !analysis.changeType.includes('hair');
+        // We detect the face/neck/eyes to ensure they are NOT in the mask.
+        // If invertDino is true, we already inverted a face/person mask, so we don't need a secondary subtraction!
+        const protectFace = !analysis.changeType.includes('face') && !analysis.changeType.includes('makeup') && !analysis.changeType.includes('hair') && !analysis.invertDino;
 
         if (protectFace) {
             workflow[ID_AI.FACE_DINO_SAM] = {
@@ -1378,7 +1413,7 @@ const generateSimpleWorkflow = (params: any) => {
             workflow[ID_AI.MASK_SUBTRACT] = {
                 class_type: "MaskComposite",
                 inputs: {
-                    destination: [ID_AI.DINO_SAM_SEGMENT, 1],
+                    destination: primaryMaskNodeContext,
                     source: [ID_AI.FACE_DILATE, 0],
                     x: 0, y: 0,
                     operation: "subtract"
@@ -1389,7 +1424,7 @@ const generateSimpleWorkflow = (params: any) => {
         workflow[ID_AI.DILATE_MASK] = {
             class_type: "ImpactDilateMask",
             inputs: {
-                mask: protectFace ? [ID_AI.MASK_SUBTRACT, 0] : [ID_AI.DINO_SAM_SEGMENT, 1],
+                mask: protectFace ? [ID_AI.MASK_SUBTRACT, 0] : primaryMaskNodeContext,
                 dilation: autoMaskDilation
             }
         };
@@ -1412,7 +1447,8 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: { samples: [ID_AI.VAE_ENCODE, 0], mask: [ID_AI.BLUR_MASK, 0] }
         };
 
-        const cfgForType = analysis.isClothingOnly ? 4.5 : (Number(params.cfg_scale) || 7.0);
+        // When completely overwriting huge areas, a higher CFG forces the AI to listen to the prompt literally.
+        const cfgForType = analysis.isClothingOnly ? 4.5 : (analysis.invertDino ? 8.5 : (Number(params.cfg_scale) || 7.0));
 
         workflow[ID_AI.SAMPLER] = {
             class_type: "KSampler",
