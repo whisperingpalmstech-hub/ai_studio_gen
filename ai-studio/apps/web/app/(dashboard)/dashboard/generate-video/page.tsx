@@ -285,7 +285,7 @@ export default function GenerateVideoPage() {
             const typeMap: any = {
                 "t2v": "text_to_video",
                 "i2v": "image_to_video",
-                "video_inpaint": "image_to_video" // Reuse video-capable models
+                "video_inpaint": "inpaint" // Uses SD checkpoints
             };
             const currentWorkflow = typeMap[mode];
 
@@ -300,19 +300,28 @@ export default function GenerateVideoPage() {
                 const filtered = (data as any[]).filter(m => {
                     const meta = m.metadata || {};
                     const compatible = meta.compatibleWorkflows || [];
+                    const lowerName = m.name.toLowerCase();
+                    const lowerPath = m.file_path.toLowerCase();
+                    const isVideoModel = lowerName.includes('wan') || lowerPath.includes('wan') || lowerName.includes('svd') || lowerPath.includes('svd');
 
-                    // Fallback for older data: search for "wan" or inpaint if no metadata exists
-                    if (compatible.length === 0) {
-                        if (mode === 'video_inpaint') {
-                            // Enforce SD-only backbone for AnimateDiff. Prevent WAN/SVD from being selectable.
-                            const lowerName = m.name.toLowerCase();
-                            const lowerPath = m.file_path.toLowerCase();
-                            if (lowerName.includes('wan') || lowerPath.includes('wan') || lowerName.includes('svd') || lowerPath.includes('svd')) {
-                                return false;
-                            }
-                            return lowerName.includes('inpaint') || lowerPath.includes('inpaint') || lowerName.includes('xl_base') || lowerPath.includes('xl_base');
+                    if (mode === 'video_inpaint') {
+                        // Enforce SD-only backbone for AnimateDiff. Prevent WAN/SVD from being selectable.
+                        if (isVideoModel) return false;
+
+                        // Fallback: check names/paths or metadata
+                        return compatible.includes("inpaint") || lowerName.includes('inpaint') || lowerPath.includes('inpaint') || lowerName.includes('xl_base') || lowerPath.includes('xl_base');
+                    }
+
+                    if (mode === 't2v' || mode === 'i2v') {
+                        // Strictly show video models for video generations
+                        if (!isVideoModel && !compatible.includes("text_to_video") && !compatible.includes("image_to_video")) {
+                            return false;
                         }
-                        return m.name.toLowerCase().includes('wan') || m.file_path.toLowerCase().includes('wan');
+                    }
+
+                    // Fallback for older data if no metadata
+                    if (compatible.length === 0) {
+                        return isVideoModel;
                     }
 
                     return compatible.includes(currentWorkflow);

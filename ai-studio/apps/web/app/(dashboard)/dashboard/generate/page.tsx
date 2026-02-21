@@ -413,7 +413,21 @@ export default function GeneratePage() {
                 // Enterprise Grade: Filter models by compatibility stored in metadata
                 const filtered = (data as any[]).filter(m => {
                     const meta = m.metadata || {};
+                    const lowerName = m.name.toLowerCase();
+                    const lowerPath = m.file_path.toLowerCase();
+
+                    // Exclude video models from image generation
+                    if (lowerName.includes('wan') || lowerPath.includes('wan') || lowerName.includes('svd') || lowerPath.includes('svd')) {
+                        return false;
+                    }
+
                     const compatible = meta.compatibleWorkflows || ["text_to_image", "image_to_image"];
+
+                    if (mode === "inpaint") {
+                        // For inpaint, prioritize models that explicitly support it in metadata OR have "inpaint" in their name
+                        return compatible.includes("inpaint") || lowerName.includes("inpaint") || lowerPath.includes("inpaint");
+                    }
+
                     return compatible.includes(currentWorkflow);
                 });
 
