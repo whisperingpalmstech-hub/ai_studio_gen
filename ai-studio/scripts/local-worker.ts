@@ -1265,7 +1265,8 @@ const generateSimpleWorkflow = (params: any) => {
                     clip_vision_output: [ID.CLIP_VISION_ENCODE, 0],
                     width: params.width || 832,
                     height: params.height || 480,
-                    length: params.video_frames || 81
+                    length: params.video_frames || 16, // Default to 16 for 8GB VRAM safety
+                    batch_size: 1
                 }
             };
         }
@@ -1576,12 +1577,15 @@ const generateSimpleWorkflow = (params: any) => {
         };
 
         // SMART ENGINE SELECTION
-        let baseModel = params.model_id;
-        // If generically requesting "wan" or missing, use the lightweight 1.3B model for memory stability
-        if (!baseModel || (baseModel.toLowerCase().includes('wan') && !baseModel.toLowerCase().includes('.safetensors'))) {
+        let baseModel = params.model_id || "sd_xl_base_1.0.safetensors";
+
+        // Only use Wan if explicitly requested via model_id containing 'wan'
+        const isWan = baseModel.toLowerCase().includes('wan');
+
+        // If it's a generic Wan request without a file extension, use the safest 1.3B model
+        if (isWan && !baseModel.toLowerCase().includes('.safetensors')) {
             baseModel = "wan2.1_t2v_1.3B_bf16.safetensors";
         }
-        const isWan = baseModel.toLowerCase().includes('wan');
 
         workflow[ID_VID.LOAD_VIDEO] = {
             class_type: "VHS_LoadVideo",
@@ -1591,7 +1595,7 @@ const generateSimpleWorkflow = (params: any) => {
                 force_size: "Custom",
                 custom_width: isWan ? 832 : 768,
                 custom_height: isWan ? 480 : 448,
-                frame_load_cap: params.video_frames || (isWan ? 32 : 64), // Reduce for Wan to avoid OOM
+                frame_load_cap: params.video_frames || (isWan ? 16 : 64), // Reduce for Wan to avoid OOM on 8GB
                 skip_first_frames: 0,
                 select_every_nth: 1
             }
