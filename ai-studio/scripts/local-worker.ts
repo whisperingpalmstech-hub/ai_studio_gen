@@ -1356,9 +1356,9 @@ const generateSimpleWorkflow = (params: any) => {
 
         // EXPLICIT FACE PROTECTION (Identity Lock)
         // We detect the face/neck/eyes to ensure they are NOT in the mask
-        const maskToPostProcess = (analysis.isClothingOnly) ? [ID_AI.MASK_SUBTRACT, 0] : [ID_AI.DILATE_MASK, 0];
+        const protectFace = !analysis.changeType.includes('face') && !analysis.changeType.includes('makeup') && !analysis.changeType.includes('hair');
 
-        if (analysis.isClothingOnly) {
+        if (protectFace) {
             workflow[ID_AI.FACE_DINO_SAM] = {
                 class_type: "GroundingDinoSAMSegment (segment anything)",
                 inputs: {
@@ -1389,14 +1389,14 @@ const generateSimpleWorkflow = (params: any) => {
         workflow[ID_AI.DILATE_MASK] = {
             class_type: "ImpactDilateMask",
             inputs: {
-                mask: analysis.isClothingOnly ? [ID_AI.MASK_SUBTRACT, 0] : [ID_AI.DINO_SAM_SEGMENT, 1],
+                mask: protectFace ? [ID_AI.MASK_SUBTRACT, 0] : [ID_AI.DINO_SAM_SEGMENT, 1],
                 dilation: autoMaskDilation
             }
         };
 
         // Smoothing for natural boundaries
-        const blurKernel = analysis.isClothingOnly ? 21 : 11;
-        const blurSigma = analysis.isClothingOnly ? 8 : 4;
+        const blurKernel = protectFace ? 21 : 11;
+        const blurSigma = protectFace ? 8 : 4;
         workflow[ID_AI.BLUR_MASK] = {
             class_type: "ImpactGaussianBlurMask",
             inputs: { mask: [ID_AI.DILATE_MASK, 0], kernel_size: blurKernel, sigma: blurSigma }
@@ -1407,15 +1407,9 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: { pixels: [ID_AI.LOAD_IMAGE, 0], vae: [ID_AI.CHECKPOINT, 2] }
         };
 
-        const ID_INVERT_MASK = "999";
-        workflow[ID_INVERT_MASK] = {
-            class_type: "InvertMask",
-            inputs: { mask: [ID_AI.BLUR_MASK, 0] }
-        };
-
         workflow[ID_AI.SET_LATENT_MASK] = {
             class_type: "SetLatentNoiseMask",
-            inputs: { samples: [ID_AI.VAE_ENCODE, 0], mask: [ID_INVERT_MASK, 0] }
+            inputs: { samples: [ID_AI.VAE_ENCODE, 0], mask: [ID_AI.BLUR_MASK, 0] }
         };
 
         const cfgForType = analysis.isClothingOnly ? 4.5 : (Number(params.cfg_scale) || 7.0);
