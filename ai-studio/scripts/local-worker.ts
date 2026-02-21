@@ -91,7 +91,7 @@ interface InpaintAnalysis {
     invertDino?: boolean;     // Whether to INVERT the primary mask (used for background changing)
 }
 
-function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): InpaintAnalysis {
+function analyzeInpaintPrompt(userPrompt: string, userNegative: string = '', userMaskPrompt?: string): InpaintAnalysis {
     const prompt = userPrompt.toLowerCase();
 
     // ============ COMPREHENSIVE KEYWORD MAPS ============
@@ -364,6 +364,24 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         }
     }
 
+    const extractedObjects: string[] = [];
+
+    // ============ EXPLICIT MANUAL MASK OVERRIDE ============
+    if (userMaskPrompt && userMaskPrompt.trim().length > 2) {
+        // If the user explicitly typed what to mask, treat it as absolute priority
+        console.log(`🎯 User provided explicit Auto-Mask target: "${userMaskPrompt}"`);
+        const manualParts = userMaskPrompt.split(',').map(p => p.trim()).filter(p => p.length > 0);
+        allDinoParts.push(...manualParts);
+
+        // Disable clothing-only mode if they ask for background
+        if (manualParts.some(p => p.toLowerCase().includes('background') || p.toLowerCase().includes('scenery'))) {
+            isClothingOnly = false;
+        }
+
+        // Add to extractedObjects so the universal logic catches it below
+        extractedObjects.push(...manualParts.map(p => p.toLowerCase()));
+    }
+
     // ============ UNIVERSAL NEGATIVE PROMPT EXTRACTION ============
     // To make this work globally for ANY image (not just clothing/space suits),
     // we take everything in the negative prompt, split by comma, and
@@ -383,8 +401,6 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         let clean = p.trim().replace(/^(?:remove|no|without|delete|clear)\s+/i, '').trim();
         return clean;
     }).filter(p => p.length > 2);
-
-    const extractedObjects: string[] = [];
 
     for (const part of negParts) {
         // If it's not a generic quality term, assume it's a physical object to mask!
@@ -1260,7 +1276,7 @@ const generateSimpleWorkflow = (params: any) => {
     // Auto-Inpaint: GroundingDINO + SAM auto-masking (Smart Automation)
     else if (type === "auto_inpaint") {
         // === USE SMART ANALYZER to extract DINO prompt from user's natural language ===
-        const analysis = analyzeInpaintPrompt(params.prompt || '', params.negative_prompt || '');
+        const analysis = analyzeInpaintPrompt(params.prompt || '', params.negative_prompt || '', params.mask_prompt);
         const dinoPrompt = params._dino_prompt_override || analysis.dinoPrompt;
         // Use the smart analyzer's denoise. For clothing changes, cap at 0.60
         // to allow dramatic outfit changes (e.g., saree → jacket) while still

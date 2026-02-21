@@ -81,6 +81,9 @@ export default function GeneratePage() {
     const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
     const [uploadedMaskFilename, setUploadedMaskFilename] = useState<string | null>(null);
     const [isAutoMask, setIsAutoMask] = useState(true);
+    const [maskPrompt, setMaskPrompt] = useState("");
+    const [isEnhancingPositive, setIsEnhancingPositive] = useState(false);
+    const [isEnhancingNegative, setIsEnhancingNegative] = useState(false);
 
     // Persist prompt and basic settings to localStorage
     useEffect(() => {
@@ -156,6 +159,42 @@ export default function GeneratePage() {
         setStatusMessage("");
         if (currentJobId) {
             localStorage.removeItem(`job_start_${currentJobId}`);
+        }
+    };
+
+    const handleEnhancePrompt = async (type: "positive" | "negative") => {
+        const textToEnhance = type === "positive" ? prompt : negativePrompt;
+        if (!textToEnhance.trim()) {
+            enterpriseToast.error("Prompt Empty", `Please describe your ${type} prompt first before enhancing.`);
+            return;
+        }
+
+        if (type === "positive") setIsEnhancingPositive(true);
+        else setIsEnhancingNegative(true);
+
+        try {
+            const response = await fetch("/api/enhance-prompt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: textToEnhance, type }),
+            });
+            const data = await response.json();
+            if (response.ok && data.enhancedPrompt) {
+                if (type === "positive") {
+                    setPrompt(data.enhancedPrompt);
+                } else {
+                    setNegativePrompt(data.enhancedPrompt);
+                }
+                enterpriseToast.success("Prompt Enhanced", `Your ${type} prompt has been optimized by AI.`);
+            } else {
+                throw new Error(data.error || "Failed to enhance prompt");
+            }
+        } catch (error: any) {
+            console.error("Enhance error:", error);
+            enterpriseToast.error("Enhance Failed", error.message || "Failed to connect to AI API");
+        } finally {
+            if (type === "positive") setIsEnhancingPositive(false);
+            else setIsEnhancingNegative(false);
         }
     };
 
@@ -476,7 +515,7 @@ export default function GeneratePage() {
             mode === 'img2img' ? 'Analyzing input image...' :
                 mode === 't2v' ? 'Starting video generation...' :
                     mode === 'i2v' ? 'Animating your image...' :
-                        mode === 'inpaint' ? (isAutoMask ? 'Grok is analyzing prompt...' : 'Preparing mask region...') : 'Starting engine...';
+                        mode === 'inpaint' ? (isAutoMask ? 'AI is analyzing prompt...' : 'Preparing mask region...') : 'Starting engine...';
 
         setStatusMessage(initialStatus);
 
@@ -499,7 +538,7 @@ export default function GeneratePage() {
                     image_filename: uploadedFilename,
                     mask_filename: isAutoMask ? undefined : uploadedMaskFilename,
                     auto_mask: mode === "inpaint" ? isAutoMask : false,
-                    mask_prompt: (mode === "inpaint" && isAutoMask) ? prompt : undefined,
+                    mask_prompt: (mode === "inpaint" && isAutoMask) ? maskPrompt : undefined,
                     denoising_strength: denoisingStrength,
                     upscale_factor: upscaleFactor,
                     model_id: selectedModel?.file_path
@@ -885,7 +924,7 @@ export default function GeneratePage() {
                                             transition: 'all 0.2s'
                                         }}
                                     >
-                                        Auto (Grok AI)
+                                        Auto (Smart AI)
                                     </button>
                                     <button
                                         onClick={() => setIsAutoMask(false)}
@@ -934,6 +973,21 @@ export default function GeneratePage() {
                                             <p style={{ color: '#9ca3af', fontSize: '0.75rem', lineHeight: 1.5 }}>
                                                 Just describe what you want in the prompt — the system will automatically detect what to change using AI. No manual masking needed!
                                             </p>
+
+                                            <div style={{ marginTop: '1rem' }}>
+                                                <label style={{ ...labelStyle, fontSize: '0.75rem', marginBottom: '0.5rem' }}>What to Auto-Mask (Optional Override)</label>
+                                                <input
+                                                    type="text"
+                                                    value={maskPrompt}
+                                                    onChange={(e) => setMaskPrompt(e.target.value)}
+                                                    placeholder="e.g. 'face', 'background', 'space suit', 'shirt and pants'"
+                                                    style={{ ...inputStyle, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(139, 92, 246, 0.3)' }}
+                                                />
+                                                <p style={{ color: '#6b7280', fontSize: '0.65rem', marginTop: '0.25rem' }}>
+                                                    If blank, the AI strictly uses your Positive and Negative prompts to hunt for objects.
+                                                </p>
+                                            </div>
+
                                             <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem' }}>
                                                 <p style={{ color: '#6b7280', fontSize: '0.7rem', marginBottom: '0.25rem' }}>✅ Good prompt examples:</p>
                                                 <p style={{ color: '#a78bfa', fontSize: '0.7rem' }}>&quot;casual pink t-shirt and blue jeans, modern outfit&quot;</p>
@@ -1006,20 +1060,24 @@ export default function GeneratePage() {
                             <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
                                 {prompt.length} characters
                             </span>
-                            <button style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0.25rem 0.5rem',
-                                fontSize: '0.75rem',
-                                color: 'white',
-                                background: 'transparent',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '0.25rem',
-                                cursor: 'pointer'
-                            }}>
-                                <Wand2 style={{ width: '0.75rem', height: '0.75rem' }} />
-                                Enhance prompt
+                            <button
+                                onClick={() => handleEnhancePrompt("positive")}
+                                disabled={isEnhancingPositive || !prompt.trim()}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem',
+                                    padding: '0.25rem 0.5rem',
+                                    fontSize: '0.75rem',
+                                    color: 'white',
+                                    background: 'transparent',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    borderRadius: '0.25rem',
+                                    cursor: isEnhancingPositive || !prompt.trim() ? 'not-allowed' : 'pointer',
+                                    opacity: isEnhancingPositive || !prompt.trim() ? 0.5 : 1
+                                }}>
+                                {isEnhancingPositive ? <Loader2 className="animate-spin" style={{ width: '0.75rem', height: '0.75rem' }} /> : <Wand2 style={{ width: '0.75rem', height: '0.75rem' }} />}
+                                Enhance prompt (Smart AI)
                             </button>
                         </div>
                     </div>
@@ -1036,8 +1094,32 @@ export default function GeneratePage() {
                             placeholder={mode === 'inpaint'
                                 ? "blurry, low quality, distorted, bad anatomy, extra limbs, deformed, artifacts"
                                 : "blurry, low quality, distorted, ugly, bad anatomy..."}
-                            style={{ ...textAreaStyle, height: '5rem' }}
+                            style={{ ...textAreaStyle, height: '5rem', marginBottom: '0.75rem' }}
                         />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                                {negativePrompt.length} characters
+                            </span>
+                            <button
+                                onClick={() => handleEnhancePrompt("negative")}
+                                disabled={isEnhancingNegative || !negativePrompt.trim()}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem',
+                                    padding: '0.25rem 0.5rem',
+                                    fontSize: '0.75rem',
+                                    color: 'white',
+                                    background: 'transparent',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    borderRadius: '0.25rem',
+                                    cursor: isEnhancingNegative || !negativePrompt.trim() ? 'not-allowed' : 'pointer',
+                                    opacity: isEnhancingNegative || !negativePrompt.trim() ? 0.5 : 1
+                                }}>
+                                {isEnhancingNegative ? <Loader2 className="animate-spin" style={{ width: '0.75rem', height: '0.75rem' }} /> : <Wand2 style={{ width: '0.75rem', height: '0.75rem' }} />}
+                                Enhance prompt (Smart AI)
+                            </button>
+                        </div>
                         {mode === 'inpaint' && !negativePrompt && (
                             <p style={{ color: '#6b7280', fontSize: '0.7rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
                                 💡 Tip: Leave empty for smart auto-negative, or add terms like the original clothing type to avoid artifacts
