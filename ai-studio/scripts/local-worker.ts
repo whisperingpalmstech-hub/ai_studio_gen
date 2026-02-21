@@ -292,26 +292,27 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         }
     }
 
-    // ============ SPECIAL PATTERN DETECTION ============
-
     // "Remove X" / "without X" / "no X" patterns — mask the item to remove
     const removePatterns = [
-        /remov(?:e|ing)\s+(?:the\s+)?(\w+)/,
-        /without\s+(?:the\s+)?(\w+)/,
-        /no\s+(\w+)/,
-        /take\s+off\s+(?:the\s+)?(\w+)/,
-        /get\s+rid\s+of\s+(?:the\s+)?(\w+)/
+        /remov(?:e|ing)[\s]+(?:the[\s]+)?([a-z\s]+)(?:,|;|$)/,
+        /without[\s]+(?:the[\s]+)?([a-z\s]+)(?:,|;|$)/,
+        /no[\s]+([a-z\s]+)(?:,|;|$)/,
+        /take[\s]+off[\s]+(?:the[\s]+)?([a-z\s]+)(?:,|;|$)/,
+        /get[\s]+rid[\s]+of[\s]+(?:the[\s]+)?([a-z\s]+)(?:,|;|$)/
     ];
     for (const pattern of removePatterns) {
-        const match = prompt.match(pattern);
-        if (match) {
-            const item = match[1];
-            // Map the item to remove to a DINO detection term
-            allDinoParts.push(item);
-            if (!matchedRegions.includes('remove_item')) {
-                matchedRegions.push('remove_item');
-                maxDenoise = Math.max(maxDenoise, 0.6);
-                maxDilation = Math.max(maxDilation, 15);
+        for (const inputStr of [prompt, userNegative.toLowerCase()]) {
+            const match = inputStr.match(pattern);
+            if (match && match[1]) {
+                const item = match[1].trim();
+                if (item && item.length > 2 && item !== 'quality' && item !== 'blurry') {
+                    allDinoParts.push(item);
+                    if (!matchedRegions.includes('remove_item')) {
+                        matchedRegions.push('remove_item');
+                        maxDenoise = Math.max(maxDenoise, 0.7);
+                        maxDilation = Math.max(maxDilation, 15);
+                    }
+                }
             }
         }
     }
@@ -374,11 +375,17 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         'sweater', 'hoodie', 'blazer', 'cardigan', 'vest', 'jumpsuit', 'romper',
         'frock', 'tunic', 'kaftan', 'abaya', 'kimono', 'uniform', 'costume',
         'traditional', 'western', 'formal', 'casual', 't-shirt', 'tshirt',
-        'dupatta', 'churidar', 'salwar', 'dhoti', 'overalls'
+        'dupatta', 'churidar', 'salwar', 'dhoti', 'overalls',
+        'space suit', 'spacesuit', 'armor', 'armour', 'background', 'scenery', 'wall'
     ];
     for (const term of allClothingTerms) {
-        if (negPrompt.includes(term)) {
+        // Match whole word roughly
+        const rx = new RegExp(`\\b${term}\\b`, 'i');
+        if (rx.test(negPrompt)) {
             clothingKeywordsFromNegative.push(term);
+            if (['background', 'scenery', 'wall'].includes(term)) {
+                matchedRegions.push('background');
+            }
         }
     }
     if (clothingKeywordsFromNegative.length > 0) {
