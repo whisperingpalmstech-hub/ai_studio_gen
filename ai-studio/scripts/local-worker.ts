@@ -363,37 +363,53 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
         }
     }
 
-    // ============ EXTRACT DINO HINTS FROM NEGATIVE PROMPT ============
-    // CRITICAL INSIGHT: The negative prompt often describes what's currently IN the image!
-    // e.g., "saree, red color, traditional dress" → DINO should detect "saree" or "dress"
-    // This is the KEY to making inpaint work when the target clothing differs from the current.
+    // ============ UNIVERSAL NEGATIVE PROMPT EXTRACTION ============
+    // To make this work globally for ANY image (not just clothing/space suits),
+    // we take everything in the negative prompt, split by comma, and
+    // treat non-quality terms as physical objects to mask using DINO.
     const negPrompt = userNegative.toLowerCase();
-    const clothingKeywordsFromNegative: string[] = [];
-    const allClothingTerms = [
-        'saree', 'sari', 'dress', 'shirt', 'blouse', 'kurta', 'suit', 'gown', 'lehenga',
-        'jacket', 'coat', 'pants', 'jeans', 'trousers', 'shorts', 'skirt', 'top',
-        'sweater', 'hoodie', 'blazer', 'cardigan', 'vest', 'jumpsuit', 'romper',
-        'frock', 'tunic', 'kaftan', 'abaya', 'kimono', 'uniform', 'costume',
-        'traditional', 'western', 'formal', 'casual', 't-shirt', 'tshirt',
-        'dupatta', 'churidar', 'salwar', 'dhoti', 'overalls',
-        'space suit', 'spacesuit', 'armor', 'armour', 'background', 'scenery', 'wall'
+
+    // Common quality/style terms to IGNORE when hunting for physical objects
+    const qualityTerms = [
+        'blurry', 'low quality', 'bad anatomy', 'deformed', 'ugly', 'distorted',
+        'disfigured', 'extra limbs', 'artifacts', 'jpeg', 'poorly drawn',
+        'watermark', 'signature', 'text', 'bad proportions', 'gross proportions',
+        'mutation', 'mutated', 'missing', 'floating'
     ];
-    for (const term of allClothingTerms) {
-        // Match whole word roughly
-        const rx = new RegExp(`\\b${term}\\b`, 'i');
-        if (rx.test(negPrompt)) {
-            clothingKeywordsFromNegative.push(term);
-            if (['background', 'scenery', 'wall'].includes(term)) {
+
+    const negParts = negPrompt.split(',').map(p => {
+        // Strip out words like "remove", "no", "without" to just get the noun
+        let clean = p.trim().replace(/^(?:remove|no|without|delete|clear)\s+/i, '').trim();
+        return clean;
+    }).filter(p => p.length > 2);
+
+    const extractedObjects: string[] = [];
+
+    for (const part of negParts) {
+        // If it's not a generic quality term, assume it's a physical object to mask!
+        const isQualityTerm = qualityTerms.some(qt => part.includes(qt));
+        if (!isQualityTerm) {
+            extractedObjects.push(part);
+        }
+    }
+
+    if (extractedObjects.length > 0) {
+        console.log(`🌍 GLOBAL Auto-Mask detected objects to remove from Image: [${extractedObjects.join(', ')}]`);
+        allDinoParts.push(...extractedObjects);
+
+        // If we are explicitly ripping out entirely new objects or backgrounds, 
+        // we need to break out of the highly-restrictive "Clothing Only" mode
+        // to grant the generator permission to drastically change the pixels.
+        isClothingOnly = false;
+        maxDenoise = Math.max(maxDenoise, 0.85); // Allow drastically replacing the base pixels
+        maxDilation = Math.max(maxDilation, 20); // Expand the mask to catch bulky edges
+
+        // Ensure "background" is registered if requested
+        if (extractedObjects.some(t => t.includes('background') || t.includes('scenery') || t.includes('indoor'))) {
+            if (!matchedRegions.includes('background')) {
                 matchedRegions.push('background');
             }
         }
-    }
-    if (clothingKeywordsFromNegative.length > 0) {
-        console.log(`🔍 Detected CURRENT clothing from negative prompt: [${clothingKeywordsFromNegative.join(', ')}]`);
-        // Add these as DINO detection terms — they describe what's actually in the image!
-        allDinoParts.push(...clothingKeywordsFromNegative);
-        // Also increase dilation to ensure full coverage of the current garment
-        maxDilation = Math.max(maxDilation, 12);
     }
 
     // ============ CALCULATE FINAL VALUES ============
@@ -446,7 +462,7 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = ''): In
     console.log(`   User Prompt: "${userPrompt.substring(0, 80)}${userPrompt.length > 80 ? '...' : ''}"`);
     console.log(`   Negative Prompt: "${userNegative.substring(0, 80)}${userNegative.length > 80 ? '...' : ''}"`);
     console.log(`   Matched Regions: [${matchedRegions.join(', ')}]`);
-    console.log(`   Clothing Keywords from Negative: [${clothingKeywordsFromNegative.join(', ')}]`);
+    console.log(`   Extracted Negative Objects: [${extractedObjects.join(', ')}]`);
     console.log(`   Clothing Only: ${isClothingOnly}`);
     console.log(`   DINO Prompt: "${dinoPrompt}"`);
     console.log(`   Denoise: ${maxDenoise}`);
