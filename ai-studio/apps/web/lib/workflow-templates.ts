@@ -346,14 +346,14 @@ export const WORKFLOW_TEMPLATES = [
             tips: 'Use "Depth" for structure and "Tile" for texture preservation. Set Denoise low to keep original actors/sets.'
         },
         nodes: [
-            { id: '1', type: 'loadVideo', position: { x: 50, y: 50 }, data: { label: 'Source Video', frame_load_cap: 32 } },
+            { id: '1', type: 'loadVideo', position: { x: 50, y: 50 }, data: { label: 'Source Video', frame_load_cap: 0 } },
             { id: '2', type: 'loadModel', position: { x: 50, y: 300 }, data: { label: 'Main Model (SDXL)', model: 'sd_xl_base_1.0.safetensors' } },
             { id: '3', type: 'prompt', position: { x: 400, y: 50 }, data: { label: 'Positive Prompt', prompt: 'cinematic style, high detail, masterpiece' } },
             { id: '4', type: 'prompt', position: { x: 400, y: 200 }, data: { label: 'Negative Prompt', prompt: 'flickering, unstable, blurry, low res' } },
             { id: '5', type: 'adLoader', position: { x: 50, y: 550 }, data: { label: 'AnimateDiff Module', model: 'mm_sdxl_v10_beta.safetensors' } },
             { id: '6', type: 'adApply', position: { x: 400, y: 400 }, data: { label: 'AnimateDiff Context' } },
-            { id: '7', type: 'controlNet', position: { x: 750, y: 50 }, data: { label: 'Depth Control', model: 'controlnet-depth-sdxl-1.0.safetensors', strength: 0.7 } },
-            { id: '8', type: 'controlNet', position: { x: 750, y: 250 }, data: { label: 'Tile Control', model: 'controlnet-tile-sdxl-1.0.safetensors', strength: 0.5 } },
+            { id: '7', type: 'controlNet', position: { x: 750, y: 50 }, data: { label: 'Lineart Control', model: 'control_v11p_sd15_canny.pth', strength: 0.7 } },
+            { id: '8', type: 'controlNet', position: { x: 750, y: 250 }, data: { label: 'Depth Control', model: 'control_v11p_sd15_canny.pth', strength: 0.5 } },
             { id: '9', type: 'vaeEncode', position: { x: 400, y: 600 }, data: { label: 'VAE Encode' } },
             { id: '10', type: 'sampler', position: { x: 1100, y: 50 }, data: { label: 'Cinematic KSampler', steps: 25, cfg: 6.5, denoise: 0.5, sampler: 'dpmpp_2m', scheduler: 'karras' } },
             { id: '11', type: 'temporalBlend', position: { x: 1400, y: 50 }, data: { label: 'Temporal Smoothing' } },

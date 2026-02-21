@@ -555,13 +555,17 @@ async function syncWorkflowAssets(nodes: ReactFlowNode[]) {
                 node.data.mask_filename = maskFilename; // Store for lookup
             }
         } else if (node.type === 'loadVideo') {
-            if (node.data.video && node.data.video.startsWith('data:video')) {
+            if (node.data.video && typeof node.data.video === 'string' && node.data.video.startsWith('data:video')) {
                 const ext = node.data.video.split(';')[0].split('/')[1] || 'mp4';
                 const filename = `wf_vid_${node.id}_${Date.now()}.${ext}`;
                 console.log(`📡 Workflow Sync: Uploading node ${node.id} video...`);
                 await uploadVideoToComfy(node.data.video, filename);
                 node.data.video = filename;
                 node.data.filename = filename;
+            } else if (node.data.filename && !node.data.video) {
+                // If it already has a filename and wasn't uploaded via base64, assume it's an existing valid file OR the template's dummy file
+                // If the dummy file doesn't exist on the server, loading will fail. We rely on the user to upload a video.
+                console.log(`📡 Workflow Sync: Node ${node.id} provided filename: ${node.data.filename}`);
             }
         }
     }
