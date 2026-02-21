@@ -126,18 +126,33 @@ export default function DashboardLayout({
                     onChange={(e) => setLanguage(e.target.value as any)}
                     style={{
                         width: '100%',
-                        padding: '0.5rem',
-                        borderRadius: '0.625rem',
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
-                        color: 'white',
+                        padding: '0.625rem 0.75rem',
+                        borderRadius: '0.5rem',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        color: '#9ca3af',
                         fontSize: '0.875rem',
+                        fontWeight: 500,
                         outline: 'none',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        appearance: 'none',
+                        backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 0.75rem center',
+                        backgroundSize: '1em'
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.color = 'white';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                        e.currentTarget.style.color = '#9ca3af';
                     }}
                 >
-                    <option value="en" style={{ color: 'white', background: '#0f0f23' }}>English (EN)</option>
-                    <option value="hi" style={{ color: 'white', background: '#0f0f23' }}>Hindi (HI)</option>
+                    <option value="en" style={{ color: 'white', background: '#0f0f23', padding: '10px' }}>English (EN)</option>
+                    <option value="hi" style={{ color: 'white', background: '#0f0f23', padding: '10px' }}>Hindi (HI)</option>
                     <option value="mr" style={{ color: 'white', background: '#0f0f23' }}>Marathi (MR)</option>
                     <option value="es" style={{ color: 'white', background: '#0f0f23' }}>Spanish (ES)</option>
                     <option value="fr" style={{ color: 'white', background: '#0f0f23' }}>French (FR)</option>
@@ -377,13 +392,19 @@ export default function DashboardLayout({
                                 setLanguage(e.target.value as any);
                             }}
                             style={{
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '0.5rem',
-                                background: 'rgba(255, 255, 255, 0.05)',
+                                padding: '0.375rem 1.5rem 0.375rem 0.5rem',
+                                borderRadius: '0.375rem',
+                                background: 'rgba(255, 255, 255, 0.04)',
                                 border: '1px solid rgba(255, 255, 255, 0.1)',
-                                color: 'white',
+                                color: '#9ca3af',
                                 fontSize: '0.75rem',
+                                fontWeight: 600,
                                 outline: 'none',
+                                appearance: 'none',
+                                backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                                backgroundRepeat: 'no-repeat',
+                                backgroundPosition: 'right 0.375rem center',
+                                backgroundSize: '0.8em'
                             }}
                         >
                             <option value="en" style={{ color: 'white', background: '#0f0f23' }}>EN</option>
