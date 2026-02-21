@@ -502,8 +502,10 @@ async function uploadVideoToComfy(dataUrl: string, filename: string) {
 
         // 2. Upload via API (using /upload/image since it supports video formats too)
         const form = new FormData();
-        form.append('image', buffer, { filename, contentType: 'video/mp4' });
+        form.append('image', buffer, { filename });
         form.append('overwrite', 'true');
+        form.append('type', 'input');
+        form.append('subfolder', '');
 
         await axios.post(`${COMFYUI_URL}/upload/image`, form, {
             headers: form.getHeaders()
@@ -555,14 +557,20 @@ async function syncWorkflowAssets(nodes: ReactFlowNode[]) {
                 node.data.mask_filename = maskFilename; // Store for lookup
             }
         } else if (node.type === 'loadVideo') {
-            if (node.data.video && typeof node.data.video === 'string' && node.data.video.startsWith('data:video')) {
-                const ext = node.data.video.split(';')[0].split('/')[1] || 'mp4';
+            if (node.data.video && typeof node.data.video === 'string' && node.data.video.startsWith('data:')) {
+                // The browser FileReader might generate data:video/mp4;base64 or data:application/...
+                let ext = 'mp4';
+                try {
+                    const mime = node.data.video.split(';')[0].split(':')[1];
+                    ext = mime.split('/')[1] || 'mp4';
+                } catch (e) { }
+
                 const filename = `wf_vid_${node.id}_${Date.now()}.${ext}`;
                 console.log(`📡 Workflow Sync: Uploading node ${node.id} video...`);
                 await uploadVideoToComfy(node.data.video, filename);
                 node.data.video = filename;
                 node.data.filename = filename;
-            } else if (node.data.filename && !node.data.video) {
+            } else if (node.data.filename) {
                 // If it already has a filename and wasn't uploaded via base64, assume it's an existing valid file OR the template's dummy file
                 // If the dummy file doesn't exist on the server, loading will fail. We rely on the user to upload a video.
                 console.log(`📡 Workflow Sync: Node ${node.id} provided filename: ${node.data.filename}`);
