@@ -1508,7 +1508,10 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: {
                 pixels: [ID_AI.LOAD_IMAGE, 0],
                 vae: [ID_AI.CHECKPOINT, 2],
-                tile_size: 512
+                tile_size: 512,
+                overlap: 64,
+                temporal_size: 64,
+                temporal_overlap: 8
             }
         };
 
@@ -1541,7 +1544,10 @@ const generateSimpleWorkflow = (params: any) => {
             inputs: {
                 samples: [ID_AI.SAMPLER, 0],
                 vae: [ID_AI.CHECKPOINT, 2],
-                tile_size: 512
+                tile_size: 512,
+                overlap: 64,
+                temporal_size: 64,
+                temporal_overlap: 8
             }
         };
 
