@@ -13,6 +13,7 @@ dotenv.config({ path: 'apps/api/.env' });
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const COMFYUI_URL = process.env.COMFYUI_URL || 'http://127.0.0.1:8188';
+const GROK_API_KEY = process.env.GROK_API_KEY || process.env.GROQ_API_KEY;
 
 // Enterprise Grade: Absolute path to ComfyUI input folder
 const COMFYUI_INPUT_DIR = '/media/sujeetnew/4TB HDD/AiModels/ComfyUI/input';
@@ -29,7 +30,7 @@ console.log(`📍 Supabase: ${SUPABASE_URL}`);
 console.log(`📍 ComfyUI: ${COMFYUI_URL}`);
 console.log(`📍 ComfyUI Input: ${COMFYUI_INPUT_DIR}`);
 
-const STUCK_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+const STUCK_TIMEOUT = 50 * 60 * 1000; // 50 minutes for long video/upscale jobs
 
 // ========== SMART INPAINT PROMPT ANALYZER (v2 — Universal) ==========
 // Handles ALL possible user scenarios: clothing, face, hair, background,
@@ -519,7 +520,44 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = '', use
         isClothingOnly
     };
 }
-// ========== END SMART ANALYZER (v2) ==========
+
+/**
+ * Enterprise Grade: AI-Powered Smart Mask Analyzer
+ * Uses Grok (Llama 3.3 via Groq) to intelligently parse complex prompts into DINO tokens.
+ */
+async function grokAnalyzeInpaint(prompt: string, apiKey: string): Promise<{ dinoPrompt: string; reasoning: string }> {
+    console.log(`🧠 Engaging AI Analyst for prompt: "${prompt}"`);
+    try {
+        const systemPrompt = `You are a professional image/video inpainting coordinator. 
+Your task is to identify the EXACT physical objects/regions that need to be masked based on the user's prompt for a masking model called GroundingDINO.
+Return ONLY the specific nouns/objects, comma-separated.
+Rules:
+- If user wants to change a shirt -> return "shirt, clothing, top"
+- If user wants a background change -> return "background, scenery, environment"
+- If user wants to change hair -> return "hair, head"
+- Do NOT include colors or adjectives. ONLY NOUNS.
+- Maximum 5 words.`;
+
+        const response = await axios.post("https://api.groq.com/openai/v1/chat/completions", {
+            model: "llama-3.3-70b-versatile",
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: `Identify masking targets for: "${prompt}"` }
+            ],
+            temperature: 0.1,
+            max_tokens: 50
+        }, {
+            headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" }
+        });
+
+        const dinoPrompt = response.data.choices[0].message.content.trim().replace(/['".]/g, '');
+        console.log(`✅ AI Analyst Success: Masking -> "${dinoPrompt}"`);
+        return { dinoPrompt, reasoning: "AI Generated" };
+    } catch (e: any) {
+        console.warn(`⚠️ AI Analyst failed: ${e.message}. Falling back to Keyword Engine.`);
+        return { dinoPrompt: "", reasoning: "Fallback" };
+    }
+}
 
 async function uploadImageToComfy(dataUrl: string, filename: string) {
     try {
@@ -1166,7 +1204,7 @@ const generateSimpleWorkflow = (params: any) => {
 
         workflow[ID.CHECKPOINT] = {
             class_type: "UNETLoader",
-            inputs: { unet_name: videoModel, weight_dtype: "default" }
+            inputs: { unet_name: videoModel, weight_dtype: "fp32" } // Force high precision for all Wan workflows
         };
 
         workflow[ID.VAE_LOADER] = {
@@ -1497,7 +1535,7 @@ const generateSimpleWorkflow = (params: any) => {
     // Video Auto-Mask: GroundingDINO + SAM masking across video frames (Enterprise Cinematic)
     else if (type === "video_inpaint") {
         const analysis = analyzeInpaintPrompt(params.prompt || '', params.negative_prompt || '', params.mask_prompt);
-        const dinoPrompt = params.mask_prompt || analysis.dinoPrompt;
+        const dinoPrompt = params._dino_prompt_override || params.mask_prompt || analysis.dinoPrompt;
 
         // Identity protection for video is even more critical
         const identityProtection = 'different person, changed identity, flickering face, distorted features, changing features, unstable face';
@@ -1585,7 +1623,7 @@ const generateSimpleWorkflow = (params: any) => {
 
             workflow[ID_VID.WAN_UNET] = {
                 class_type: "UNETLoader",
-                inputs: { unet_name: baseModel, weight_dtype: "default" }
+                inputs: { unet_name: baseModel, weight_dtype: "fp32" } // Force high precision as requested
             };
 
             workflow[ID_VID.WAN_VAE] = {
@@ -1834,21 +1872,22 @@ async function processJob(job: any) {
         }
 
         // Handle Mask for Inpainting
-        if (job.type === "inpaint") {
-            // Check if this is an auto-mask job (Grok AI / GroundingDINO+SAM)
+        if (job.type === "inpaint" || job.type === "video_inpaint") {
             if (job.params.auto_mask) {
-                console.log(`🎭 Auto-Mask Mode Detected — routing to auto_inpaint pipeline`);
-                console.log(`   user prompt received: "${job.params.prompt}"`);
+                console.log(`🎭 Auto-Mask Mode Detected — routing to smart pipeline`);
 
-                // CRITICAL FIX: The frontend might pass the user's FULL prompt as `mask_prompt`. 
-                // GroundingDINO errors wildly on full sentences. If it's the exact same as prompt, delete it.
-                if (job.params.mask_prompt && job.params.mask_prompt === job.params.prompt) {
-                    console.log(`   ⚠️ mask_prompt matches full text prompt! Deleting to allow DINO Noun AI to extract keywords instead.`);
-                    delete job.params.mask_prompt;
+                // If we have an API key, use AI to parse the mask targets!
+                if (GROK_API_KEY && (!job.params.mask_prompt || job.params.mask_prompt === job.params.prompt)) {
+                    const aiResult = await grokAnalyzeInpaint(job.params.prompt, GROK_API_KEY);
+                    if (aiResult.dinoPrompt) {
+                        job.params._dino_prompt_override = aiResult.dinoPrompt;
+                        console.log(`   🎭 AI Smart Masking: "${aiResult.dinoPrompt}"`);
+                    }
                 }
 
-                // Override the job type so generateSimpleWorkflow picks the auto_inpaint branch
-                job.type = "auto_inpaint";
+                if (job.type === "inpaint") {
+                    job.type = "auto_inpaint";
+                }
             } else {
                 // Manual mask mode — require mask_filename
                 if (!maskFilename) {
@@ -2142,7 +2181,7 @@ async function cleanupStuckJobs() {
         for (const job of stuckJobs) {
             await supabase.from('jobs').update({
                 status: 'failed',
-                error_message: 'Job timed out (limit: 10 mins)'
+                error_message: 'Job timed out (limit: 50 mins)'
             }).eq('id', job.id);
 
             // Try to interrupt ComfyUI just in case

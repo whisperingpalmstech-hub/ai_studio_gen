@@ -80,11 +80,19 @@ export default function GenerateVideoPage() {
     const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
     const [uploadedVideoFilename, setUploadedVideoFilename] = useState<string | null>(null);
     const [inputVideo, setInputVideo] = useState<string | null>(null);
+    const [isEnhancingPositive, setIsEnhancingPositive] = useState(false);
+    const [isEnhancingNegative, setIsEnhancingNegative] = useState(false);
 
     // Persist prompt and settings to localStorage
     useEffect(() => {
         const savedPrompt = localStorage.getItem("last_video_prompt");
         if (savedPrompt) setPrompt(savedPrompt);
+
+        const savedNegPrompt = localStorage.getItem("last_video_neg_prompt");
+        if (savedNegPrompt) setNegativePrompt(savedNegPrompt);
+
+        const savedMaskPrompt = localStorage.getItem("last_video_mask_prompt");
+        if (savedMaskPrompt) setMaskPrompt(savedMaskPrompt);
 
         const savedAspect = localStorage.getItem("last_video_aspect");
         if (savedAspect) {
@@ -98,6 +106,14 @@ export default function GenerateVideoPage() {
     useEffect(() => {
         if (prompt) localStorage.setItem("last_video_prompt", prompt);
     }, [prompt]);
+
+    useEffect(() => {
+        if (negativePrompt) localStorage.setItem("last_video_neg_prompt", negativePrompt);
+    }, [negativePrompt]);
+
+    useEffect(() => {
+        if (maskPrompt) localStorage.setItem("last_video_mask_prompt", maskPrompt);
+    }, [maskPrompt]);
 
     useEffect(() => {
         if (selectedAspect) localStorage.setItem("last_video_aspect", JSON.stringify(selectedAspect));
@@ -150,6 +166,42 @@ export default function GenerateVideoPage() {
         setStatusMessage("");
         if (currentJobId) {
             localStorage.removeItem(`job_video_start_${currentJobId}`);
+        }
+    };
+
+    const handleEnhancePrompt = async (type: "positive" | "negative") => {
+        const textToEnhance = type === "positive" ? prompt : negativePrompt;
+        if (!textToEnhance.trim()) {
+            enterpriseToast.error("Prompt Empty", `Please describe your ${type} prompt first before enhancing.`);
+            return;
+        }
+
+        if (type === "positive") setIsEnhancingPositive(true);
+        else setIsEnhancingNegative(true);
+
+        try {
+            const response = await fetch("/api/enhance-prompt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: textToEnhance, type }),
+            });
+            const data = await response.json();
+            if (response.ok && data.enhancedPrompt) {
+                if (type === "positive") {
+                    setPrompt(data.enhancedPrompt);
+                } else {
+                    setNegativePrompt(data.enhancedPrompt);
+                }
+                enterpriseToast.success("Prompt Enhanced", `Your ${type} prompt has been optimized by AI.`);
+            } else {
+                throw new Error(data.error || "Failed to enhance prompt");
+            }
+        } catch (error: any) {
+            console.error("Enhance error:", error);
+            enterpriseToast.error("Enhance Failed", error.message || "Failed to connect to AI API");
+        } finally {
+            if (type === "positive") setIsEnhancingPositive(false);
+            else setIsEnhancingNegative(false);
         }
     };
 
@@ -305,11 +357,8 @@ export default function GenerateVideoPage() {
                     const isVideoModel = lowerName.includes('wan') || lowerPath.includes('wan') || lowerName.includes('svd') || lowerPath.includes('svd');
 
                     if (mode === 'video_inpaint') {
-                        // Enforce SD-only backbone for AnimateDiff. Prevent WAN/SVD from being selectable.
-                        if (isVideoModel) return false;
-
-                        // Fallback: check names/paths or metadata
-                        return compatible.includes("inpaint") || lowerName.includes('inpaint') || lowerPath.includes('inpaint') || lowerName.includes('xl_base') || lowerPath.includes('xl_base');
+                        // Allow BOTH SD backbones (AnimateDiff) AND Wan models.
+                        return compatible.includes("inpaint") || lowerName.includes('inpaint') || lowerPath.includes('inpaint') || lowerName.includes('xl_base') || lowerPath.includes('xl_base') || isVideoModel;
                     }
 
                     if (mode === 't2v' || mode === 'i2v') {
@@ -328,16 +377,11 @@ export default function GenerateVideoPage() {
                 });
 
                 setAvailableModels(filtered);
-
-                // Set default Wan model based on mode
-                const defaultModel = filtered.find(m => {
-                    const ln = m.name.toLowerCase();
-                    const lp = m.file_path.toLowerCase();
-                    return (mode === "t2v" && (ln.includes("t2v") || m.metadata?.compatibleWorkflows?.includes("text_to_video"))) ||
-                        (mode === "i2v" && (ln.includes("i2v") || m.metadata?.compatibleWorkflows?.includes("image_to_video"))) ||
-                        (mode === "video_inpaint" && (ln.includes("inpaint") || lp.includes("inpaint") || ln.includes("xl_base") || lp.includes("xl_base") || m.metadata?.compatibleWorkflows?.includes("inpaint")))
-                });
-                setSelectedModel(defaultModel || filtered[0]);
+                if (filtered.length > 0) {
+                    // Smart Default: if video mode and we have a Wan model, pick it!
+                    const wanModel = filtered.find(m => m.name.toLowerCase().includes('wan'));
+                    setSelectedModel(wanModel || filtered[0]);
+                }
             }
         };
         if (!isGenerating) fetchModels();
@@ -850,22 +894,69 @@ export default function GenerateVideoPage() {
                             <span style={{ fontSize: '0.75rem', color: '#a78bfa' }}>
                                 {prompt.length} {t("tokensUsed")}
                             </span>
-                            <button style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.375rem',
-                                padding: '0.5rem 0.875rem',
-                                fontSize: '0.75rem',
-                                color: 'white',
-                                background: 'rgba(168, 85, 247, 0.1)',
-                                border: '1px solid rgba(168, 85, 247, 0.2)',
-                                borderRadius: '0.5rem',
-                                cursor: 'pointer',
-                                fontWeight: 500,
-                                transition: 'all 0.2s'
-                            }}>
-                                <Wand2 size={14} />
-                                Refine with AI
+                            <button
+                                onClick={() => handleEnhancePrompt('positive')}
+                                disabled={isEnhancingPositive}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.375rem',
+                                    padding: '0.5rem 0.875rem',
+                                    fontSize: '0.75rem',
+                                    color: 'white',
+                                    background: 'rgba(168, 85, 247, 0.1)',
+                                    border: '1px solid rgba(168, 85, 247, 0.2)',
+                                    borderRadius: '0.5rem',
+                                    cursor: isEnhancingPositive ? 'not-allowed' : 'pointer',
+                                    fontWeight: 500,
+                                    transition: 'all 0.2s'
+                                }}>
+                                {isEnhancingPositive ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                    <Sparkles size={14} />
+                                )}
+                                {isEnhancingPositive ? "Optimizing..." : "Magic Enhance"}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Negative Prompt */}
+                    <div style={cardStyle}>
+                        <label style={labelStyle}>
+                            <Trash2 size={16} color="#ef4444" />
+                            Exclusion Logic (Negative Prompt)
+                        </label>
+                        <textarea
+                            value={negativePrompt}
+                            onChange={(e) => setNegativePrompt(e.target.value)}
+                            placeholder="Describe what to AVOID (e.g. blurry, low quality, distorted hands)..."
+                            style={{ ...textAreaStyle, height: '4rem', marginBottom: '1rem' }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => handleEnhancePrompt('negative')}
+                                disabled={isEnhancingNegative}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.375rem',
+                                    padding: '0.5rem 0.875rem',
+                                    fontSize: '0.75rem',
+                                    color: 'white',
+                                    background: 'rgba(239, 68, 68, 0.05)',
+                                    border: '1px solid rgba(239, 68, 68, 0.1)',
+                                    borderRadius: '0.5rem',
+                                    cursor: isEnhancingNegative ? 'not-allowed' : 'pointer',
+                                    fontWeight: 500,
+                                    transition: 'all 0.2s'
+                                }}>
+                                {isEnhancingNegative ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                    <Sparkles size={14} />
+                                )}
+                                {isEnhancingNegative ? "Optimizing..." : "Magic Negative"}
                             </button>
                         </div>
                     </div>
