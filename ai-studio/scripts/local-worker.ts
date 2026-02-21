@@ -451,33 +451,36 @@ function analyzeInpaintPrompt(userPrompt: string, userNegative: string = '', use
     // ============ UNIVERSAL BACKGROUND OVERRIDE ============
     // DINO is terrible at detecting "background". The best way to mask a background
     // is to map the subject (or face) and INVERT the mask!
-    if (matchedRegions.includes('background') || extractedObjects.some(t => t.includes('background') || t.includes('scenery') || t.includes('indoor'))) {
-        console.log(`🌍 Background change detected! Engaging Inverse-Masking Strategy.`);
+    // Skip this hack if the user explicitly typed their own mask targets via the override!
+    if (!userMaskPrompt || userMaskPrompt.trim().length <= 2) {
+        if (matchedRegions.includes('background') || extractedObjects.some(t => t.includes('background') || t.includes('scenery') || t.includes('indoor'))) {
+            console.log(`🌍 Background change detected! Engaging Inverse-Masking Strategy.`);
 
-        // Did they ALSO want to change clothes?
-        const wantsClothingChange = extractedObjects.some(o => o.includes('suit') || o.includes('armor') || o.includes('shirt') || o.includes('dress') || o.includes('clothes')) ||
-            matchedRegions.some(r => r !== 'background' && r !== 'general_fallback');
+            // Did they ALSO want to change clothes?
+            const wantsClothingChange = extractedObjects.some(o => o.includes('suit') || o.includes('armor') || o.includes('shirt') || o.includes('dress') || o.includes('clothes')) ||
+                matchedRegions.some(r => r !== 'background' && r !== 'general_fallback');
 
-        if (wantsClothingChange) {
-            // They want to change BOTH background and clothes. 
-            // We find ONLY the face, and invert it. This masks EVERYTHING EXCEPT THE FACE.
-            allDinoParts = ["face", "head", "neck"];
-            invertDino = true;
-            isClothingOnly = false;
-            maxDenoise = 1.0; // 100% denoise to completely destroy the original background/suit pixels
-            maxDilation = 5; // Slight dilation for face protection
-            minThreshold = 0.25;
-            console.log(`   -> Target: Background + Clothing (Inverting Face Mask)`);
-        } else {
-            // They want to change the background, but KEEP their current clothes.
-            // We find the PERSON, and invert it. This protects the face AND the clothes.
-            allDinoParts = ["person", "human", "clothing"];
-            invertDino = true;
-            isClothingOnly = false;
-            maxDenoise = 1.0; // 100% denoise for the background
-            maxDilation = 10;
-            minThreshold = 0.25;
-            console.log(`   -> Target: Background ONLY (Inverting Person Mask)`);
+            if (wantsClothingChange) {
+                // They want to change BOTH background and clothes. 
+                // We find ONLY the face, and invert it. This masks EVERYTHING EXCEPT THE FACE.
+                allDinoParts = ["face", "head", "neck"];
+                invertDino = true;
+                isClothingOnly = false;
+                maxDenoise = 1.0; // 100% denoise to completely destroy the original background/suit pixels
+                maxDilation = 5; // Slight dilation for face protection
+                minThreshold = 0.25;
+                console.log(`   -> Target: Background + Clothing (Inverting Face Mask)`);
+            } else {
+                // They want to change the background, but KEEP their current clothes.
+                // We find the PERSON, and invert it. This protects the face AND the clothes.
+                allDinoParts = ["person", "human", "clothing"];
+                invertDino = true;
+                isClothingOnly = false;
+                maxDenoise = 1.0; // 100% denoise for the background
+                maxDilation = 10;
+                minThreshold = 0.25;
+                console.log(`   -> Target: Background ONLY (Inverting Person Mask)`);
+            }
         }
     }
 
