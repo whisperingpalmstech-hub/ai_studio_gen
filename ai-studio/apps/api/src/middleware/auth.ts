@@ -2,12 +2,10 @@ import { Request, Response, NextFunction } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { config } from "../config/index.js";
+import { supabaseAdmin as supabase } from "../services/supabase.js";
 
-// Supabase admin client (bypasses RLS)
-const supabase = createClient(
-    config.supabase.url,
-    config.supabase.serviceRoleKey
-);
+// Note: Using the shared supabaseAdmin client (with proper auth options)
+// instead of creating a separate client here.
 
 // User info attached to authenticated requests
 export interface AuthUser {
@@ -39,7 +37,7 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
 
     try {
         // 1. Try to find dedicated system user by email
-        const { data: existingProfile } = await supabase
+        const { data: existingProfile } = await (supabase as any)
             .from("profiles")
             .select("id, tier, credits, email")
             .eq("email", SYSTEM_USER_EMAIL)
@@ -57,7 +55,7 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
         }
 
         // 2. Fallback: Use the first real user from profiles (for API key auth)
-        const { data: profiles, error: profileError } = await supabase
+        const { data: profiles, error: profileError } = await (supabase as any)
             .from("profiles")
             .select("id, tier, credits, email")
             .limit(1);
@@ -123,7 +121,7 @@ export async function authMiddleware(
         }
 
         // Get user profile
-        const { data: profile } = await supabase
+        const { data: profile } = await (supabase as any)
             .from("profiles")
             .select("tier, credits")
             .eq("id", user.id)
@@ -166,7 +164,7 @@ export async function optionalAuthMiddleware(
         } = await supabase.auth.getUser(token);
 
         if (user) {
-            const { data: profile } = await supabase
+            const { data: profile } = await (supabase as any)
                 .from("profiles")
                 .select("tier, credits")
                 .eq("id", user.id)
@@ -195,7 +193,7 @@ export async function optionalAuthMiddleware(
 async function lookupUserApiKey(rawKey: string): Promise<AuthUser | null> {
     const keyHash = createHash("sha256").update(rawKey).digest("hex");
 
-    const { data: keyRow, error } = await supabase
+    const { data: keyRow, error } = await (supabase as any)
         .from("api_keys")
         .select("user_id")
         .eq("key_hash", keyHash)
@@ -205,13 +203,13 @@ async function lookupUserApiKey(rawKey: string): Promise<AuthUser | null> {
     if (error || !keyRow) return null;
 
     // Update last_used_at
-    await supabase
+    await (supabase as any)
         .from("api_keys")
         .update({ last_used_at: new Date().toISOString() })
         .eq("key_hash", keyHash);
 
     // Fetch the key owner's profile
-    const { data: profile } = await supabase
+    const { data: profile } = await (supabase as any)
         .from("profiles")
         .select("tier, credits, email")
         .eq("id", keyRow.user_id)
