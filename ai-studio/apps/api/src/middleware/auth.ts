@@ -38,7 +38,7 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
     if (cachedSystemUser) return cachedSystemUser;
 
     try {
-        // 1. FASTEST PATH: Direct profile table lookup (no auth admin API needed)
+        // Direct profile table lookup — no Supabase admin API needed
         const { data: existingProfile } = await supabase
             .from("profiles")
             .select("id, tier, credits, email")
@@ -52,69 +52,22 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
                 tier: existingProfile.tier || "pro",
                 credits: existingProfile.credits || 99999,
             };
+            console.log("✅ System user found in profiles table");
             return cachedSystemUser;
         }
-
-        // 2. Profile not found — create system user via Admin Auth API (with timeout)
-        const createPromise = supabase.auth.admin.createUser({
-            email: SYSTEM_USER_EMAIL,
-            password: SYSTEM_USER_PASSWORD,
-            email_confirm: true,
-            user_metadata: { full_name: "API System User" },
-        });
-
-        // 5-second timeout to prevent Render 502
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Supabase admin API timeout")), 5000)
-        );
-
-        const { data: newUser, error: createError } = await Promise.race([
-            createPromise,
-            timeoutPromise,
-        ]) as any;
-
-        if (createError) {
-            // Might be duplicate — that's fine, use fallback
-            console.warn("System user create error:", createError.message);
-            throw createError;
-        }
-
-        if (newUser?.user) {
-            const userId = newUser.user.id;
-            console.log(`✅ Created API system user with ID: ${userId}`);
-
-            // Ensure profile exists
-            await supabase.from("profiles").upsert({
-                id: userId,
-                email: SYSTEM_USER_EMAIL,
-                full_name: "API System User",
-                tier: "pro",
-                credits: 99999,
-            });
-
-            cachedSystemUser = {
-                id: userId,
-                email: SYSTEM_USER_EMAIL,
-                tier: "pro",
-                credits: 99999,
-            };
-            return cachedSystemUser;
-        }
-
-        throw new Error("No user returned");
-
     } catch (error: any) {
-        console.error("System user init failed:", error.message || error);
-        // FALLBACK: Virtual system user so API key auth still works
-        console.warn("⚠️ Using fallback system user — API key auth will work but user is virtual");
-        cachedSystemUser = {
-            id: "system-fallback-user",
-            email: SYSTEM_USER_EMAIL,
-            tier: "pro",
-            credits: 99999,
-        };
-        return cachedSystemUser;
+        console.warn("⚠️ Profile lookup failed:", error.message);
     }
+
+    // Fallback: Virtual system user (works for API key auth, job creation, etc.)
+    console.log("ℹ️ Using virtual system user for API key authentication");
+    cachedSystemUser = {
+        id: "system-api-user",
+        email: SYSTEM_USER_EMAIL,
+        tier: "pro",
+        credits: 99999,
+    };
+    return cachedSystemUser;
 }
 
 export async function authMiddleware(
