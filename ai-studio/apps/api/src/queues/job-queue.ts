@@ -419,11 +419,13 @@ if (!IS_CLOUD_MODE) {
 
 export { jobWorker };
 
-// Graceful shutdown
-process.on("SIGTERM", async () => {
-    console.log("Shutting down job queue...");
+// NOTE: No SIGTERM handler — Render sends SIGTERM during deploys
+// which would kill Redis and break all job creation.
+// Only handle SIGINT (Ctrl+C in local dev)
+process.on("SIGINT", async () => {
+    console.log("Shutting down job queue (SIGINT)...");
     if (jobWorker) await jobWorker.close();
     await jobQueue.close();
     connection.disconnect();
+    process.exit(0);
 });
-

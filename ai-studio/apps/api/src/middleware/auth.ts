@@ -57,13 +57,15 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
         }
 
         // 2. Fallback: Use the first real user from profiles (for API key auth)
-        const { data: anyProfile } = await supabase
+        const { data: profiles, error: profileError } = await supabase
             .from("profiles")
             .select("id, tier, credits, email")
-            .limit(1)
-            .single();
+            .limit(1);
 
-        if (anyProfile) {
+        if (profileError) {
+            console.error("⚠️ Profiles query error:", profileError.message);
+        } else if (profiles && profiles.length > 0) {
+            const anyProfile = profiles[0];
             cachedSystemUser = {
                 id: anyProfile.id,
                 email: anyProfile.email || SYSTEM_USER_EMAIL,
@@ -72,6 +74,8 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
             };
             console.log("✅ Using existing user profile for API key auth:", anyProfile.id);
             return cachedSystemUser;
+        } else {
+            console.warn("⚠️ Profiles table returned 0 rows");
         }
     } catch (error: any) {
         console.warn("⚠️ Profile lookup failed:", error.message);
