@@ -62,7 +62,7 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
     // Fallback: Virtual system user (works for API key auth, job creation, etc.)
     console.log("ℹ️ Using virtual system user for API key authentication");
     cachedSystemUser = {
-        id: "system-api-user",
+        id: "00000000-0000-0000-0000-000000000000",
         email: SYSTEM_USER_EMAIL,
         tier: "pro",
         credits: 99999,

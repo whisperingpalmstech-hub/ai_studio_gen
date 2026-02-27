@@ -8,41 +8,47 @@ const router = Router();
 
 // GET /api/v1/models - List available models
 router.get("/", async (req: AuthenticatedRequest, res: Response) => {
-    const user = req.user!;
-    const { type, base_model, is_public, limit = 50, offset = 0 } = req.query;
+    try {
+        const user = req.user!;
+        const { type, base_model, is_public, limit = 50, offset = 0 } = req.query;
 
-    let query = supabaseAdmin
-        .from("models")
-        .select("*", { count: "exact" })
-        .eq("installed", true) // Only show models actually present on disk
-        .or(`user_id.eq.${user.id},is_public.eq.true,is_system.eq.true`)
-        .order("created_at", { ascending: false })
-        .range(Number(offset), Number(offset) + Number(limit) - 1);
+        let query = supabaseAdmin
+            .from("models")
+            .select("*", { count: "exact" })
+            .eq("installed", true) // Only show models actually present on disk
+            .or(`user_id.eq.${user.id},is_public.eq.true,is_system.eq.true`)
+            .order("created_at", { ascending: false })
+            .range(Number(offset), Number(offset) + Number(limit) - 1);
 
-    if (type) {
-        query = query.eq("type", type);
+        if (type) {
+            query = query.eq("type", type);
+        }
+        if (base_model) {
+            query = query.eq("base_model", base_model);
+        }
+        if (is_public === "true") {
+            query = query.eq("is_public", true);
+        }
+
+        const { data: models, count, error } = await query;
+
+        if (error) {
+            console.error("Supabase models query error:", error);
+            return res.status(500).json({ error: "Failed to fetch models", details: error.message });
+        }
+
+        res.json({
+            data: models,
+            pagination: {
+                total: count,
+                limit: Number(limit),
+                offset: Number(offset),
+            },
+        });
+    } catch (err: any) {
+        console.error("Models route error:", err);
+        res.status(500).json({ error: "Internal error", message: err.message });
     }
-    if (base_model) {
-        query = query.eq("base_model", base_model);
-    }
-    if (is_public === "true") {
-        query = query.eq("is_public", true);
-    }
-
-    const { data: models, count, error } = await query;
-
-    if (error) {
-        throw new Error("Failed to fetch models");
-    }
-
-    res.json({
-        data: models,
-        pagination: {
-            total: count,
-            limit: Number(limit),
-            offset: Number(offset),
-        },
-    });
 });
 
 // GET /api/v1/models/:id - Get model details
