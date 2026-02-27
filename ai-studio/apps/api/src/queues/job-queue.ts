@@ -384,37 +384,46 @@ async function processJob(job: Job<GenerationJobData>) {
 }
 
 
+// Create worker ONLY in local mode (cloud API just queues jobs, local worker processes them)
+import { IS_CLOUD_MODE } from "../config/comfy-paths.js";
 
-// Create worker
-export const jobWorker = new Worker("ai-generation", processJob, {
-    connection,
-    concurrency: 5,
-});
+let jobWorker: Worker | null = null;
 
-// Worker event handlers
-jobWorker.on("completed", (job: Job<GenerationJobData>) => {
-    console.log(`Job ${job.id} has completed`);
-});
+if (!IS_CLOUD_MODE) {
+    jobWorker = new Worker("ai-generation", processJob, {
+        connection,
+        concurrency: 5,
+    });
 
-jobWorker.on("failed", (job: Job<GenerationJobData> | undefined, err: Error) => {
-    if (job) {
-        console.error(`Job ${job.id} has failed:`, err);
-    } else {
-        console.error(`Job failed (undefined job):`, err);
-    }
-});
+    // Worker event handlers
+    jobWorker.on("completed", (job: Job<GenerationJobData>) => {
+        console.log(`Job ${job.id} has completed`);
+    });
 
-jobWorker.on("progress", (job: Job<GenerationJobData, any, string>, progress: any) => {
-    // BullMQ progress is slightly loose in typing, so we can cast if needed or just use as is if compatible.
-    console.log(`Job ${job.id} is ${JSON.stringify(progress)}% complete`);
-});
+    jobWorker.on("failed", (job: Job<GenerationJobData> | undefined, err: Error) => {
+        if (job) {
+            console.error(`Job ${job.id} has failed:`, err);
+        } else {
+            console.error(`Job failed (undefined job):`, err);
+        }
+    });
+
+    jobWorker.on("progress", (job: Job<GenerationJobData, any, string>, progress: any) => {
+        console.log(`Job ${job.id} is ${JSON.stringify(progress)}% complete`);
+    });
+
+    console.log("Job queue initialized (with local worker)");
+} else {
+    console.log("☁️ Cloud mode — Job queue initialized (queue only, no local worker)");
+}
+
+export { jobWorker };
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {
     console.log("Shutting down job queue...");
-    await jobWorker.close();
+    if (jobWorker) await jobWorker.close();
     await jobQueue.close();
     connection.disconnect();
 });
 
-console.log("Job queue initialized");
