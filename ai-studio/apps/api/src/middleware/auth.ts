@@ -38,13 +38,7 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
     if (cachedSystemUser) return cachedSystemUser;
 
     try {
-        // 1. Try to find existing system user by email (targeted lookup, not listUsers)
-        const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers({
-            page: 1,
-            perPage: 1,
-        });
-
-        // Try a direct profile lookup first (fastest path)
+        // 1. FASTEST PATH: Direct profile table lookup (no auth admin API needed)
         const { data: existingProfile } = await supabase
             .from("profiles")
             .select("id, tier, credits, email")
@@ -61,61 +55,58 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
             return cachedSystemUser;
         }
 
-        // 2. Create the system user via Admin Auth API
-        const { data: newUser, error: createError } =
-            await supabase.auth.admin.createUser({
-                email: SYSTEM_USER_EMAIL,
-                password: SYSTEM_USER_PASSWORD,
-                email_confirm: true,
-                user_metadata: { full_name: "API System User" },
-            });
+        // 2. Profile not found — create system user via Admin Auth API (with timeout)
+        const createPromise = supabase.auth.admin.createUser({
+            email: SYSTEM_USER_EMAIL,
+            password: SYSTEM_USER_PASSWORD,
+            email_confirm: true,
+            user_metadata: { full_name: "API System User" },
+        });
+
+        // 5-second timeout to prevent Render 502
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Supabase admin API timeout")), 5000)
+        );
+
+        const { data: newUser, error: createError } = await Promise.race([
+            createPromise,
+            timeoutPromise,
+        ]) as any;
 
         if (createError) {
-            // User might already exist (duplicate email error) — try to find by email
-            if (createError.message?.includes("already") || createError.message?.includes("duplicate")) {
-                console.log("System user already exists, looking up...");
-                const { data: listData } = await supabase.auth.admin.listUsers();
-                const found = listData?.users?.find((u: any) => u.email === SYSTEM_USER_EMAIL);
-                if (found) {
-                    cachedSystemUser = {
-                        id: found.id,
-                        email: SYSTEM_USER_EMAIL,
-                        tier: "pro",
-                        credits: 99999,
-                    };
-                    return cachedSystemUser;
-                }
-            }
+            // Might be duplicate — that's fine, use fallback
+            console.warn("System user create error:", createError.message);
             throw createError;
         }
 
-        if (!newUser?.user) throw new Error("No user returned from createUser");
+        if (newUser?.user) {
+            const userId = newUser.user.id;
+            console.log(`✅ Created API system user with ID: ${userId}`);
 
-        const userId = newUser.user.id;
-        console.log(`✅ Created API system user with ID: ${userId}`);
+            // Ensure profile exists
+            await supabase.from("profiles").upsert({
+                id: userId,
+                email: SYSTEM_USER_EMAIL,
+                full_name: "API System User",
+                tier: "pro",
+                credits: 99999,
+            });
 
-        // 3. Ensure profile exists
-        await supabase.from("profiles").upsert({
-            id: userId,
-            email: SYSTEM_USER_EMAIL,
-            full_name: "API System User",
-            tier: "pro",
-            credits: 99999,
-        });
+            cachedSystemUser = {
+                id: userId,
+                email: SYSTEM_USER_EMAIL,
+                tier: "pro",
+                credits: 99999,
+            };
+            return cachedSystemUser;
+        }
 
-        cachedSystemUser = {
-            id: userId,
-            email: SYSTEM_USER_EMAIL,
-            tier: "pro",
-            credits: 99999,
-        };
-        return cachedSystemUser;
+        throw new Error("No user returned");
 
     } catch (error: any) {
-        console.error("System user creation failed:", error.message || error);
-        // FALLBACK: Return a virtual system user so API key auth doesn't completely break
-        // This allows the API to function even if Supabase admin APIs are having issues
-        console.warn("⚠️ Using fallback system user — some features may be limited");
+        console.error("System user init failed:", error.message || error);
+        // FALLBACK: Virtual system user so API key auth still works
+        console.warn("⚠️ Using fallback system user — API key auth will work but user is virtual");
         cachedSystemUser = {
             id: "system-fallback-user",
             email: SYSTEM_USER_EMAIL,
