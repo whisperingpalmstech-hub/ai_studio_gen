@@ -2,10 +2,25 @@ import { Request, Response, NextFunction } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { config } from "../config/index.js";
-import { supabaseAdmin as supabase } from "../services/supabase.js";
 
-// Note: Using the shared supabaseAdmin client (with proper auth options)
-// instead of creating a separate client here.
+// Dedicated admin client for auth operations (profile lookups, API key checks)
+// This is separate from the shared supabaseAdmin to avoid authorization context
+// contamination from auth.getUser() calls which can change the client's headers.
+const supabase = createClient(
+    config.supabase.url,
+    config.supabase.serviceRoleKey,
+    {
+        auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+        },
+        global: {
+            headers: {
+                Authorization: `Bearer ${config.supabase.serviceRoleKey}`,
+            },
+        },
+    }
+);
 
 // User info attached to authenticated requests
 export interface AuthUser {
