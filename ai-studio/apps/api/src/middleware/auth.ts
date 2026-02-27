@@ -38,7 +38,7 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
     if (cachedSystemUser) return cachedSystemUser;
 
     try {
-        // Direct profile table lookup — no Supabase admin API needed
+        // 1. Try to find dedicated system user by email
         const { data: existingProfile } = await supabase
             .from("profiles")
             .select("id, tier, credits, email")
@@ -55,12 +55,30 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
             console.log("✅ System user found in profiles table");
             return cachedSystemUser;
         }
+
+        // 2. Fallback: Use the first real user from profiles (for API key auth)
+        const { data: anyProfile } = await supabase
+            .from("profiles")
+            .select("id, tier, credits, email")
+            .limit(1)
+            .single();
+
+        if (anyProfile) {
+            cachedSystemUser = {
+                id: anyProfile.id,
+                email: anyProfile.email || SYSTEM_USER_EMAIL,
+                tier: anyProfile.tier || "pro",
+                credits: anyProfile.credits || 99999,
+            };
+            console.log("✅ Using existing user profile for API key auth:", anyProfile.id);
+            return cachedSystemUser;
+        }
     } catch (error: any) {
         console.warn("⚠️ Profile lookup failed:", error.message);
     }
 
-    // Fallback: Virtual system user (works for API key auth, job creation, etc.)
-    console.log("ℹ️ Using virtual system user for API key authentication");
+    // 3. Last resort fallback (read-only operations only)
+    console.warn("⚠️ No profiles found — API key auth will only work for read operations");
     cachedSystemUser = {
         id: "00000000-0000-0000-0000-000000000000",
         email: SYSTEM_USER_EMAIL,
