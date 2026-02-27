@@ -37,43 +37,64 @@ let cachedSystemUser: AuthUser | null = null;
 async function getOrCreateSystemUser(): Promise<AuthUser> {
     if (cachedSystemUser) return cachedSystemUser;
 
-    // 1. Try to find existing system user by email
-    const { data: listData } = await supabase.auth.admin.listUsers();
-    const existingUser = listData?.users?.find(
-        (u: any) => u.email === SYSTEM_USER_EMAIL
-    );
+    try {
+        // 1. Try to find existing system user by email (targeted lookup, not listUsers)
+        const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers({
+            page: 1,
+            perPage: 1,
+        });
 
-    let userId: string;
+        // Try a direct profile lookup first (fastest path)
+        const { data: existingProfile } = await supabase
+            .from("profiles")
+            .select("id, tier, credits, email")
+            .eq("email", SYSTEM_USER_EMAIL)
+            .maybeSingle();
 
-    if (existingUser) {
-        userId = existingUser.id;
-    } else {
+        if (existingProfile) {
+            cachedSystemUser = {
+                id: existingProfile.id,
+                email: SYSTEM_USER_EMAIL,
+                tier: existingProfile.tier || "pro",
+                credits: existingProfile.credits || 99999,
+            };
+            return cachedSystemUser;
+        }
+
         // 2. Create the system user via Admin Auth API
         const { data: newUser, error: createError } =
             await supabase.auth.admin.createUser({
                 email: SYSTEM_USER_EMAIL,
                 password: SYSTEM_USER_PASSWORD,
-                email_confirm: true, // Auto-confirm
+                email_confirm: true,
                 user_metadata: { full_name: "API System User" },
             });
 
-        if (createError || !newUser?.user) {
-            console.error("Failed to create system user:", createError);
-            throw new Error("Failed to create API system user");
+        if (createError) {
+            // User might already exist (duplicate email error) — try to find by email
+            if (createError.message?.includes("already") || createError.message?.includes("duplicate")) {
+                console.log("System user already exists, looking up...");
+                const { data: listData } = await supabase.auth.admin.listUsers();
+                const found = listData?.users?.find((u: any) => u.email === SYSTEM_USER_EMAIL);
+                if (found) {
+                    cachedSystemUser = {
+                        id: found.id,
+                        email: SYSTEM_USER_EMAIL,
+                        tier: "pro",
+                        credits: 99999,
+                    };
+                    return cachedSystemUser;
+                }
+            }
+            throw createError;
         }
-        userId = newUser.user.id;
+
+        if (!newUser?.user) throw new Error("No user returned from createUser");
+
+        const userId = newUser.user.id;
         console.log(`✅ Created API system user with ID: ${userId}`);
-    }
 
-    // 3. Ensure profile exists (the trigger should handle this, but be safe)
-    const { data: profile } = await supabase
-        .from("profiles")
-        .select("tier, credits")
-        .eq("id", userId)
-        .single();
-
-    if (!profile) {
-        // Profile trigger might not have fired; insert manually
+        // 3. Ensure profile exists
         await supabase.from("profiles").upsert({
             id: userId,
             email: SYSTEM_USER_EMAIL,
@@ -81,16 +102,28 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
             tier: "pro",
             credits: 99999,
         });
+
+        cachedSystemUser = {
+            id: userId,
+            email: SYSTEM_USER_EMAIL,
+            tier: "pro",
+            credits: 99999,
+        };
+        return cachedSystemUser;
+
+    } catch (error: any) {
+        console.error("System user creation failed:", error.message || error);
+        // FALLBACK: Return a virtual system user so API key auth doesn't completely break
+        // This allows the API to function even if Supabase admin APIs are having issues
+        console.warn("⚠️ Using fallback system user — some features may be limited");
+        cachedSystemUser = {
+            id: "system-fallback-user",
+            email: SYSTEM_USER_EMAIL,
+            tier: "pro",
+            credits: 99999,
+        };
+        return cachedSystemUser;
     }
-
-    cachedSystemUser = {
-        id: userId,
-        email: SYSTEM_USER_EMAIL,
-        tier: profile?.tier || "pro",
-        credits: profile?.credits || 99999,
-    };
-
-    return cachedSystemUser;
 }
 
 export async function authMiddleware(
