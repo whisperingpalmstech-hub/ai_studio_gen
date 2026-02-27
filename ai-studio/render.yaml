@@ -1,0 +1,34 @@
+# Render.com Blueprint — AI Studio API
+# Deploy: Dashboard > New > Blueprint > Connect this repo
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: ai-studio-api
+    runtime: docker
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: SUPABASE_URL
+        sync: false  # Set manually in Render dashboard
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: JWT_SECRET
+        sync: false  # Set manually in Render dashboard
+      - key: REDIS_URL
+        sync: false  # Set manually — use your Upstash Redis URL
+      - key: API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: GROK_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: COMFYUI_URL
+        value: "http://127.0.0.1:8188"  # Not used on cloud — worker handles ComfyUI
+      - key: CORS_ORIGIN
+        value: "*"
+    healthCheckPath: /health

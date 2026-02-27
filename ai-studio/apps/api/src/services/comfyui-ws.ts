@@ -31,6 +31,11 @@ class ComfyUIWebSocketService {
     }
 
     public initialize() {
+        // In cloud mode, worker handles ComfyUI directly — no WS needed from API
+        if (process.env.NODE_ENV === "production" && !process.env.COMFYUI_ROOT) {
+            console.log("☁️ Cloud mode — ComfyUI WebSocket relay disabled (worker handles it locally).");
+            return;
+        }
         this.connect();
     }
 

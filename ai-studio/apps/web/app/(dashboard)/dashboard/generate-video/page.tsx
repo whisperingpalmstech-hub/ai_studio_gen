@@ -440,7 +440,8 @@ export default function GenerateVideoPage() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Not authenticated");
 
-            const uploadEndpoint = isVideo ? "http://localhost:4000/api/v1/uploads/video" : "http://localhost:4000/api/v1/uploads/image";
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+            const uploadEndpoint = isVideo ? `${apiBase}/uploads/video` : `${apiBase}/uploads/image`;
             const response = await fetch(uploadEndpoint, {
                 method: "POST",
                 headers: {

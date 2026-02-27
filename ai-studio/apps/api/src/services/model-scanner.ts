@@ -2,7 +2,7 @@
 import fs from "fs";
 import path from "path";
 import { supabaseAdmin } from "./supabase.js";
-import { COMFYUI_ROOT } from "../config/comfy-paths.js";
+import { COMFYUI_ROOT, IS_CLOUD_MODE } from "../config/comfy-paths.js";
 
 export type ModelType = "checkpoint" | "lora" | "embedding" | "controlnet" | "vae" | "upscaler" | "unet";
 
@@ -29,6 +29,10 @@ export class ModelScannerService {
      * Entry point to start the periodic scanner
      */
     public start() {
+        if (IS_CLOUD_MODE) {
+            console.log("☁️ Cloud mode detected — Model Scanner disabled (no local ComfyUI).");
+            return;
+        }
         console.log("🚀 Initializing Dynamic Model Scanner...");
 
         // Initial scan
