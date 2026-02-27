@@ -51,50 +51,41 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
     if (cachedSystemUser) return cachedSystemUser;
 
     try {
-        // 1. Try to find dedicated system user by email
-        const { data: existingProfile } = await (supabase as any)
-            .from("profiles")
-            .select("id, tier, credits, email")
-            .eq("email", SYSTEM_USER_EMAIL)
-            .maybeSingle();
+        // Use direct REST API call instead of Supabase JS client
+        // This ensures the service_role key is sent correctly
+        const url = `${config.supabase.url}/rest/v1/profiles?select=id,tier,credits,email&limit=1`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': config.supabase.serviceRoleKey,
+                'Authorization': `Bearer ${config.supabase.serviceRoleKey}`,
+                'Content-Type': 'application/json',
+            },
+        });
 
-        if (existingProfile) {
-            cachedSystemUser = {
-                id: existingProfile.id,
-                email: SYSTEM_USER_EMAIL,
-                tier: existingProfile.tier || "pro",
-                credits: existingProfile.credits || 99999,
-            };
-            console.log("✅ System user found in profiles table");
-            return cachedSystemUser;
-        }
-
-        // 2. Fallback: Use the first real user from profiles (for API key auth)
-        const { data: profiles, error: profileError } = await (supabase as any)
-            .from("profiles")
-            .select("id, tier, credits, email")
-            .limit(1);
-
-        if (profileError) {
-            console.error("⚠️ Profiles query error:", profileError.message);
-        } else if (profiles && profiles.length > 0) {
-            const anyProfile = profiles[0];
-            cachedSystemUser = {
-                id: anyProfile.id,
-                email: anyProfile.email || SYSTEM_USER_EMAIL,
-                tier: anyProfile.tier || "pro",
-                credits: anyProfile.credits || 99999,
-            };
-            console.log("✅ Using existing user profile for API key auth:", anyProfile.id);
-            return cachedSystemUser;
+        if (response.ok) {
+            const profiles = await response.json();
+            if (Array.isArray(profiles) && profiles.length > 0) {
+                const profile = profiles[0];
+                cachedSystemUser = {
+                    id: profile.id,
+                    email: profile.email || SYSTEM_USER_EMAIL,
+                    tier: profile.tier || "pro",
+                    credits: profile.credits || 99999,
+                };
+                console.log("✅ Using existing user profile for API key auth:", profile.id);
+                return cachedSystemUser;
+            } else {
+                console.warn("⚠️ Profiles REST API returned 0 rows");
+            }
         } else {
-            console.warn("⚠️ Profiles table returned 0 rows");
+            const errBody = await response.text();
+            console.error("⚠️ Profiles REST API error:", response.status, errBody);
         }
     } catch (error: any) {
         console.warn("⚠️ Profile lookup failed:", error.message);
     }
 
-    // 3. Last resort fallback (read-only operations only)
+    // Last resort: fallback (read-only operations only)
     console.warn("⚠️ No profiles found — API key auth will only work for read operations");
     cachedSystemUser = {
         id: "00000000-0000-0000-0000-000000000000",
