@@ -99,4 +99,14 @@ modelScannerService.start();
 import { jobMonitorService } from "./services/job-monitor.js";
 jobMonitorService.start();
 
+// Global error handlers — prevent process crashes on Render
+process.on("unhandledRejection", (reason: any) => {
+    console.error("⚠️ Unhandled Promise Rejection (caught):", reason?.message || reason);
+});
+
+process.on("uncaughtException", (err) => {
+    console.error("⚠️ Uncaught Exception (caught):", err.message);
+    // Don't exit — keep server alive on Render
+});
+
 export default app;

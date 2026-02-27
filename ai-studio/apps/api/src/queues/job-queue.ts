@@ -4,9 +4,27 @@ import { config } from "../config/index.js";
 import { supabaseAdmin } from "../services/supabase.js";
 import { webSocketService } from "../services/websocket.js";
 
-// Redis connection
+// Redis connection — resilient for cloud deployment
 const connection = new IORedis(config.redis.url, {
     maxRetriesPerRequest: null,
+    retryStrategy: (times: number) => {
+        if (times > 3) {
+            console.warn(`⚠️ Redis connection failed after ${times} retries. Will retry in 30s.`);
+            return 30000; // Wait 30s between retries after 3 failures
+        }
+        return Math.min(times * 500, 3000);
+    },
+    enableOfflineQueue: true,
+    connectTimeout: 10000,
+});
+
+// Prevent unhandled Redis errors from crashing the process
+connection.on("error", (err) => {
+    console.error("Redis connection error (non-fatal):", err.message);
+});
+
+connection.on("connect", () => {
+    console.log("✅ Redis connected successfully");
 });
 
 // Job queue
