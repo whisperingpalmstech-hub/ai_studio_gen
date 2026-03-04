@@ -38,7 +38,7 @@ export function generateSimpleWorkflow(params: any): Record<string, any> {
 
         workflow[ID_OLD.CHECKPOINT] = {
             class_type: "CheckpointLoaderSimple",
-            inputs: { ckpt_name: params.model_id || "v1-5-pruned-emaonly.safetensors" }
+            inputs: { ckpt_name: params.model_id || "juggernautXL_ragnarokBy.safetensors" }
         };
 
         workflow[ID_OLD.PROMPT_POS] = {

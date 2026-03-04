@@ -38,12 +38,12 @@ To start generating an image, send a `POST` request to the `/jobs` endpoint.
       "width": 1024,
       "height": 1024,
       "steps": 30,
-      "model_id": "9a4b38a2-4a25-4da7-8895-83571ae2626d"
+      "model_id": "optional-uuid-here"
     }
     ```
-    *   **Tip:** `9a4b38a2-4a25-4da7-8895-83571ae2626d` is the ID for the **Juggernaut XL** (SDXL) model.
+    *   **💡 Note:** `model_id` is now **optional**. If you don't provide it, the API defaults to **Juggernaut XL** (SDXL).
 
-### Example cURL Command (with SDXL Model)
+### Example cURL Command (Defaulting to Juggernaut XL)
 ```bash
 curl -X POST https://ai-studio-gen-1.onrender.com/api/v1/jobs \
   -H "x-api-key: aisk_636a295b9ae0e5924a51747ffa8678f005d7a49d" \
@@ -52,8 +52,7 @@ curl -X POST https://ai-studio-gen-1.onrender.com/api/v1/jobs \
     "type": "txt2img",
     "prompt": "a beautiful landscape, high detail, 8k",
     "width": 1024,
-    "height": 1024,
-    "model_id": "9a4b38a2-4a25-4da7-8895-83571ae2626d"
+    "height": 1024
   }'
 ```
 

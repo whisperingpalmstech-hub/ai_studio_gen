@@ -1082,7 +1082,7 @@ const generateSimpleWorkflow = (params: any) => {
             VAE_ENCODE_INPAINT: "11"
         };
 
-        const ckptName = params.model_id || "sd_xl_base_1.0.safetensors";
+        const ckptName = params.model_id || "juggernautXL_ragnarokBy.safetensors";
 
         workflow[ID_OLD.CHECKPOINT] = {
             class_type: "CheckpointLoaderSimple",
@@ -1372,8 +1372,8 @@ const generateSimpleWorkflow = (params: any) => {
             MASK_SUBTRACT: "22"
         };
 
-        // Use user's selected model, fallback to SDXL base
-        const ckptName = params.model_id || "sd_xl_base_1.0.safetensors";
+        // Use user's selected model, fallback to Juggernaut XL
+        const ckptName = params.model_id || "juggernautXL_ragnarokBy.safetensors";
         const samplerMap: Record<string, string> = {
             "Euler a": "euler_ancestral",
             "euler_a": "euler_ancestral",
@@ -1709,7 +1709,7 @@ const generateSimpleWorkflow = (params: any) => {
             const modelLower = baseCheckpoint.toLowerCase();
 
             if (modelLower.includes('svd') || modelLower.includes('video')) {
-                baseCheckpoint = "sd_xl_base_1.0.safetensors";
+                baseCheckpoint = "juggernautXL_ragnarokBy.safetensors";
             }
 
             workflow[ID_VID.CHECKPOINT] = {
