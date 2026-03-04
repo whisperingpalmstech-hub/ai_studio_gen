@@ -697,7 +697,7 @@ function convertReactFlowToComfyUI(nodes: ReactFlowNode[], edges: ReactFlowEdge[
         switch (node.type) {
             case "loadModel":
                 class_type = "CheckpointLoaderSimple";
-                inputs["ckpt_name"] = node.data.model || "sd_xl_base_1.0.safetensors";
+                inputs["ckpt_name"] = node.data.model || "juggernautXL_ragnarokBy.safetensors";
                 break;
             case "prompt":
                 class_type = "CLIPTextEncode";
@@ -1583,7 +1583,7 @@ const generateSimpleWorkflow = (params: any) => {
         };
 
         // SMART ENGINE SELECTION
-        let baseModel = params.model_id || "sd_xl_base_1.0.safetensors";
+        let baseModel = params.model_id || "juggernautXL_ragnarokBy.safetensors";
 
         // Only use Wan if explicitly requested via model_id containing 'wan'
         const isWan = baseModel.toLowerCase().includes('wan');
@@ -1829,12 +1829,12 @@ const generateSimpleWorkflow = (params: any) => {
 
 // Main processing loop
 async function pollForJobs() {
-    console.log("🔍 Checking for pending jobs...");
+    console.log("🔍 Checking for jobs (pending/queued)...");
 
     const { data: jobs, error } = await supabase
         .from('jobs')
         .select('*')
-        .eq('status', 'pending')
+        .in('status', ['pending', 'queued'])
         .order('created_at', { ascending: true })
         .limit(1);
 
@@ -1979,6 +1979,17 @@ async function processJob(job: any) {
             }
         }
 
+        let modelId = job.params.model_id;
+        // Resolve UUID to filename if needed
+        if (modelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(modelId)) {
+            console.log(`📡 Resolving model ID '${modelId}' to filename...`);
+            const { data: mData } = await supabase.from('models').select('file_path').eq('id', modelId).maybeSingle();
+            if (mData?.file_path) {
+                console.log(`✅ Resolved to: ${mData.file_path}`);
+                modelId = mData.file_path;
+            }
+        }
+
         let workflow = job.params.workflow;
         if (!workflow) {
             console.log(`🛠️ Building Enterprise Workflow for: ${job.type}`);
@@ -1987,7 +1998,7 @@ async function processJob(job: any) {
                 type: job.type,
                 image_filename: imageFilename,
                 mask_filename: maskFilename,
-                model_id: job.params.model_id
+                model_id: modelId || "juggernautXL_ragnarokBy.safetensors"
             });
         } else if (workflow.nodes && workflow.edges) {
             // Enterprise Grade: Convert ReactFlow format back to ComfyUI API format
