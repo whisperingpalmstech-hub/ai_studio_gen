@@ -151,18 +151,25 @@ router.post("/", async (req: AuthenticatedRequest, res: Response, next: NextFunc
 
         // Enterprise Grade: Validate model-workflow compatibility (FULLY DYNAMIC)
         if (validatedParams.model_id) {
-            // 1. First check if it's in the DB for dynamic metadata
+            // 1. Resolve UUID to filename if needed, and check compatibility
             const { data: dbModel } = await (supabaseAdmin as any)
                 .from("models")
-                .select("metadata")
-                .eq("file_path", validatedParams.model_id)
+                .select("id, file_path, metadata")
+                .or(`id.eq.${validatedParams.model_id},file_path.eq.${validatedParams.model_id}`)
                 .maybeSingle();
 
-            if (dbModel && (dbModel as any).metadata) {
-                const { validateCompatibilityFromMetadata } = await import("../services/model-registry.js");
-                const isCompatible = validateCompatibilityFromMetadata((dbModel as any).metadata, type);
-                if (!isCompatible) {
-                    throw new BadRequestError(`Model '${validatedParams.model_id}' is not compatible with workflow type '${type}' (Based on DB Metadata).`);
+            if (dbModel) {
+                // Update params with the actual filename for ComfyUI
+                const originalId = validatedParams.model_id;
+                validatedParams.model_id = dbModel.file_path;
+                console.log(`📡 Resolved model '${originalId}' to filename: ${validatedParams.model_id}`);
+
+                if (dbModel.metadata) {
+                    const { validateCompatibilityFromMetadata } = await import("../services/model-registry.js");
+                    const isCompatible = validateCompatibilityFromMetadata(dbModel.metadata, type);
+                    if (!isCompatible) {
+                        throw new BadRequestError(`Model '${originalId}' is not compatible with workflow type '${type}' (Based on DB Metadata).`);
+                    }
                 }
             } else {
                 // 2. Fallback to hardcoded registry for system models or if DB has no metadata
