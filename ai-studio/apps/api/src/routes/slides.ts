@@ -64,10 +64,13 @@ router.post(
                 .eq("id", user.id);
 
             // Generate slides (this is the main pipeline)
+            // user_id is needed so the service can create image jobs in Supabase
+            // → local worker picks them up → ComfyUI generates → uploads to Storage
             const result = await generateSlides({
                 topic: validated.topic,
                 num_slides: validated.num_slides,
                 style: validated.style,
+                user_id: user.id,
             });
 
             // Read the file to send as response

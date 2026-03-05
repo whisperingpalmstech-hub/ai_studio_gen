@@ -1,16 +1,21 @@
 /**
- * AI Slide Generator Service v2
- * Pipeline: Grok LLM → Rich Slide JSON → ComfyUI (txt2img) → PPT Assembly
+ * AI Slide Generator Service v3
+ * Pipeline: Grok LLM → Rich Slide JSON → Supabase Job Queue → Local Worker → ComfyUI → PPT Assembly
+ * 
+ * KEY CHANGE (v3): Instead of calling ComfyUI directly (which only works locally),
+ * we now create jobs in Supabase — the same pattern used by all other image generation.
+ * The local worker picks them up, sends to ComfyUI, and uploads results to Supabase Storage.
+ * This means Render (cloud) + local worker + ComfyUI all work together! 🚀
  */
 import axios from "axios";
 import fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import PptxGenJS from "pptxgenjs";
+import { supabaseAdmin } from "./supabase.js";
 
 // ─── Config ───────────────────────────────────────────────────────
 const GROK_API_KEY = process.env.GROK_API_KEY || "";
-const COMFYUI_URL = process.env.COMFYUI_URL || "http://127.0.0.1:8188";
 const OUTPUT_DIR = path.resolve("slide_outputs");
 
 // Ensure output directory exists
@@ -34,16 +39,7 @@ export interface GenerateSlidesOptions {
     topic: string;
     num_slides?: number;
     style?: string;
-}
-
-// ─── Check if ComfyUI is reachable ───────────────────────────────
-async function isComfyUIAvailable(): Promise<boolean> {
-    try {
-        await axios.get(`${COMFYUI_URL}/system_stats`, { timeout: 3000 });
-        return true;
-    } catch {
-        return false;
-    }
+    user_id?: string; // Needed for creating jobs in Supabase
 }
 
 // ─── Step 1: Generate RICH slide content via Grok LLM ─────────────
@@ -132,138 +128,147 @@ Return this JSON structure:
     }
 }
 
-// ─── Step 2: Generate image via ComfyUI txt2img workflow ──────────
-async function generateSlideImage(
+// ─── Step 2: Generate image via Supabase Job Queue ────────────────
+// This creates a txt2img job in Supabase, which the local worker picks up,
+// processes through ComfyUI, and uploads the result to Supabase Storage.
+// Same flow as the main /api/v1/jobs endpoint! 🔥
+
+async function createImageJob(
     prompt: string,
     slideIndex: number,
-    jobId: string
-): Promise<Buffer | null> {
-    console.log(`🎨 [Slide ${slideIndex + 1}] Generating image...`);
+    slideJobId: string,
+    userId: string
+): Promise<string> {
+    const jobId = uuidv4();
+    console.log(`🎨 [Slide ${slideIndex + 1}] Creating image job: ${jobId}`);
     console.log(`   Prompt: "${prompt.substring(0, 80)}..."`);
 
-    // Build txt2img workflow — same as your working image generation
-    const workflow: Record<string, any> = {
-        "4": {
-            class_type: "CheckpointLoaderSimple",
-            inputs: { ckpt_name: "juggernautXL_ragnarokBy.safetensors" },
-        },
-        "6": {
-            class_type: "CLIPTextEncode",
-            inputs: {
-                text: `${prompt}, professional presentation visual, clean composition, high quality, 4k, sharp details, vibrant colors`,
-                clip: ["4", 1],
-            },
-        },
-        "7": {
-            class_type: "CLIPTextEncode",
-            inputs: {
-                text: "text, words, letters, numbers, watermark, logo, blurry, low quality, distorted, ugly, amateur, noisy, artifacts, oversaturated",
-                clip: ["4", 1],
-            },
-        },
-        "5": {
-            class_type: "EmptyLatentImage",
-            inputs: { width: 1024, height: 576, batch_size: 1 },
-        },
-        "3": {
-            class_type: "KSampler",
-            inputs: {
-                model: ["4", 0],
-                positive: ["6", 0],
-                negative: ["7", 0],
-                latent_image: ["5", 0],
-                seed: Math.floor(Math.random() * 10000000),
-                steps: 20,
-                cfg: 7,
-                sampler_name: "euler_ancestral",
-                scheduler: "normal",
-                denoise: 1.0,
-            },
-        },
-        "8": {
-            class_type: "VAEDecode",
-            inputs: {
-                samples: ["3", 0],
-                vae: ["4", 2],
-            },
-        },
-        "9": {
-            class_type: "SaveImage",
-            inputs: {
-                images: ["8", 0],
-                filename_prefix: `AiStudio_Slide_${jobId}_${slideIndex}`,
-            },
-        },
+    const params = {
+        prompt: `${prompt}, professional presentation visual, clean composition, high quality, 4k, sharp details, vibrant colors`,
+        negative_prompt: "text, words, letters, numbers, watermark, logo, blurry, low quality, distorted, ugly, amateur, noisy, artifacts, oversaturated",
+        width: 1024,
+        height: 576,
+        steps: 20,
+        cfg_scale: 7,
+        seed: Math.floor(Math.random() * 10000000),
+        sampler: "euler_a",
+        batch_size: 1,
+        batch_count: 1,
     };
 
-    try {
-        const clientId = `slide-gen-${jobId}-${slideIndex}`;
+    // Insert job into Supabase — the local worker will pick it up
+    const { data: job, error } = await (supabaseAdmin
+        .from("jobs")
+        .insert({
+            id: jobId,
+            user_id: userId,
+            type: "txt2img" as any,
+            status: "queued",
+            priority: "standard" as any,
+            params: params as any,
+            credits_estimated: 0, // Slide images are included in the slide generation cost
+            queued_at: new Date().toISOString(),
+        } as any)
+        .select()
+        .single() as any);
 
-        // Submit prompt to ComfyUI
-        const promptRes = await axios.post(
-            `${COMFYUI_URL}/prompt`,
-            { prompt: workflow, client_id: clientId },
-            { timeout: 10000 }
-        );
+    if (error) {
+        console.error(`   ❌ Failed to create image job:`, error.message);
+        throw new Error(`Failed to create image job: ${error.message}`);
+    }
 
-        const promptId = promptRes.data.prompt_id;
-        console.log(`   🚀 Queued in ComfyUI: ${promptId}`);
+    console.log(`   ✅ Job created in Supabase: ${jobId} (status: queued)`);
+    return jobId;
+}
 
-        // Poll for completion (max 180 seconds per image)
-        let completed = false;
-        let outputs: any = null;
-        for (let i = 0; i < 180; i++) {
-            await new Promise((r) => setTimeout(r, 1000));
+async function waitForJobCompletion(
+    jobId: string,
+    slideIndex: number,
+    timeoutMs: number = 300000 // 5 minutes per image
+): Promise<string[] | null> {
+    console.log(`   ⏳ [Slide ${slideIndex + 1}] Waiting for job ${jobId}...`);
+    const startTime = Date.now();
+    const pollInterval = 2000; // Check every 2 seconds
 
-            try {
-                const historyRes = await axios.get(`${COMFYUI_URL}/history/${promptId}`, { timeout: 5000 });
-                const history = historyRes.data[promptId];
+    while (Date.now() - startTime < timeoutMs) {
+        const { data: job, error } = await supabaseAdmin
+            .from("jobs")
+            .select("status, outputs, error_message")
+            .eq("id", jobId)
+            .single();
 
-                if (history?.status?.completed) {
-                    completed = true;
-                    outputs = history.outputs;
-                    break;
-                }
-                if (history?.status?.status_str === "error") {
-                    console.error(`   ❌ ComfyUI error for slide ${slideIndex + 1}:`,
-                        JSON.stringify(history.status.messages || "unknown"));
-                    return null;
-                }
-            } catch {
-                // Retry
-            }
-
-            if (i % 15 === 0 && i > 0) {
-                console.log(`   ⏳ Waiting for slide ${slideIndex + 1} image... (${i}s)`);
-            }
-        }
-
-        if (!completed || !outputs) {
-            console.error(`   ❌ Timeout generating image for slide ${slideIndex + 1}`);
+        if (error) {
+            console.error(`   ❌ Error polling job ${jobId}:`, error.message);
             return null;
         }
 
-        // Fetch the generated image
-        for (const nodeId of Object.keys(outputs)) {
-            const files = outputs[nodeId]?.images || [];
-            for (const file of files) {
-                const imgRes = await axios.get(`${COMFYUI_URL}/view`, {
-                    params: {
-                        filename: file.filename,
-                        subfolder: file.subfolder,
-                        type: file.type,
-                    },
-                    responseType: "arraybuffer",
-                    timeout: 15000,
-                });
-                console.log(`   ✅ Image generated for slide ${slideIndex + 1} (${Buffer.from(imgRes.data).length} bytes)`);
-                return Buffer.from(imgRes.data);
-            }
+        const jobData = job as any;
+
+        if (jobData.status === "completed") {
+            const urls = jobData.outputs?.urls || [];
+            console.log(`   ✅ [Slide ${slideIndex + 1}] Job completed! ${urls.length} image(s)`);
+            return urls;
         }
 
-        return null;
+        if (jobData.status === "failed") {
+            console.error(`   ❌ [Slide ${slideIndex + 1}] Job failed: ${jobData.error_message}`);
+            return null;
+        }
+
+        // Log progress periodically
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        if (elapsed % 10 === 0 && elapsed > 0) {
+            console.log(`   ⏳ [Slide ${slideIndex + 1}] Still waiting... (${elapsed}s, status: ${jobData.status})`);
+        }
+
+        await new Promise((r) => setTimeout(r, pollInterval));
+    }
+
+    console.error(`   ❌ [Slide ${slideIndex + 1}] Timeout after ${timeoutMs / 1000}s`);
+    return null;
+}
+
+async function downloadImageFromUrl(url: string): Promise<Buffer | null> {
+    try {
+        const response = await axios.get(url, {
+            responseType: "arraybuffer",
+            timeout: 30000,
+        });
+        return Buffer.from(response.data);
     } catch (error: any) {
-        console.error(`   ❌ ComfyUI error for slide ${slideIndex + 1}:`, error.message);
+        console.error(`   ❌ Failed to download image: ${error.message}`);
+        return null;
+    }
+}
+
+async function generateSlideImage(
+    prompt: string,
+    slideIndex: number,
+    slideJobId: string,
+    userId: string
+): Promise<Buffer | null> {
+    try {
+        // Step 1: Create the job in Supabase
+        const jobId = await createImageJob(prompt, slideIndex, slideJobId, userId);
+
+        // Step 2: Wait for the local worker to process it
+        const imageUrls = await waitForJobCompletion(jobId, slideIndex);
+
+        if (!imageUrls || imageUrls.length === 0) {
+            console.error(`   ❌ No image URLs returned for slide ${slideIndex + 1}`);
+            return null;
+        }
+
+        // Step 3: Download the image from Supabase Storage
+        const imageBuffer = await downloadImageFromUrl(imageUrls[0]);
+
+        if (imageBuffer) {
+            console.log(`   ✅ Image downloaded for slide ${slideIndex + 1} (${imageBuffer.length} bytes)`);
+        }
+
+        return imageBuffer;
+    } catch (error: any) {
+        console.error(`   ❌ Image generation failed for slide ${slideIndex + 1}: ${error.message}`);
         return null;
     }
 }
@@ -435,8 +440,9 @@ export async function generateSlides(
 ): Promise<{ filePath: string; presentation: SlidePresentation; jobId: string }> {
     const jobId = uuidv4().substring(0, 8);
     console.log(`\n🚀 ════════════════════════════════════════════════`);
-    console.log(`   AI Slide Generator v2 — Job ${jobId}`);
+    console.log(`   AI Slide Generator v3 — Job ${jobId}`);
     console.log(`   Topic: "${options.topic}"`);
+    console.log(`   Mode: Supabase Job Queue → Local Worker → ComfyUI`);
     console.log(`════════════════════════════════════════════════════\n`);
 
     // Step 1: Generate content via Grok
@@ -446,19 +452,22 @@ export async function generateSlides(
         options.style || "corporate"
     );
 
-    // Step 2: Generate images via ComfyUI (if available)
-    const comfyAvailable = await isComfyUIAvailable();
+    // Step 2: Generate images via Supabase Job Queue
+    // Each image is created as a separate job in Supabase.
+    // The local worker picks them up, processes via ComfyUI, and uploads results.
     let images: (Buffer | null)[] = [];
 
-    if (comfyAvailable) {
-        console.log(`\n🎨 ComfyUI is ONLINE — Generating ${presentation.slides.length} slide images via txt2img...\n`);
+    if (options.user_id) {
+        console.log(`\n🎨 Creating ${presentation.slides.length} image jobs in Supabase...`);
+        console.log(`   These will be picked up by the local worker → ComfyUI\n`);
 
         // Generate images ONE at a time to avoid GPU overload
         for (let idx = 0; idx < presentation.slides.length; idx++) {
             const img = await generateSlideImage(
                 presentation.slides[idx].image_prompt,
                 idx,
-                jobId
+                jobId,
+                options.user_id
             );
             images.push(img);
         }
@@ -466,8 +475,8 @@ export async function generateSlides(
         const successCount = images.filter((img) => img !== null).length;
         console.log(`\n📊 Images generated: ${successCount}/${presentation.slides.length}`);
     } else {
-        console.log(`\n⚠️ ComfyUI not reachable at ${COMFYUI_URL} — generating slides WITHOUT images`);
-        console.log(`   To enable images: start ComfyUI and run the API locally\n`);
+        console.log(`\n⚠️ No user_id provided — generating slides WITHOUT images`);
+        console.log(`   (user_id is needed to create jobs in Supabase)\n`);
         images = presentation.slides.map(() => null);
     }
 
