@@ -9,6 +9,7 @@ import { usersRouter } from "./routes/users.js";
 import { uploadsRouter } from "./routes/uploads.js";
 import { assetsRouter } from "./routes/assets.js";
 import { generationsRouter } from "./routes/generations.js";
+import { slidesRouter } from "./routes/slides.js";
 import { healthRouter } from "./routes/health.js";
 import { errorHandler } from "./middleware/error.js";
 import { authMiddleware, flexAuthMiddleware } from "./middleware/auth.js";
@@ -66,6 +67,7 @@ app.use("/api/v1/users", authMiddleware, usersRouter);
 app.use("/api/v1/uploads", flexAuthMiddleware, uploadsRouter);
 app.use("/api/v1/assets", flexAuthMiddleware, assetsRouter);
 app.use("/api/v1/generations", authMiddleware, generationsRouter);
+app.use("/api/v1/slides", flexAuthMiddleware, slidesRouter);
 
 // 404 handler
 app.use((req: any, res: any) => {
