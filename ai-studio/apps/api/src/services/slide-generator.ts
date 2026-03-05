@@ -1,6 +1,6 @@
 /**
- * AI Slide Generator Service
- * Pipeline: Grok LLM → Slide JSON → ComfyUI (Image Gen) → PPT Assembly
+ * AI Slide Generator Service v2
+ * Pipeline: Grok LLM → Rich Slide JSON → ComfyUI (txt2img) → PPT Assembly
  */
 import axios from "axios";
 import fs from "fs";
@@ -33,10 +33,20 @@ export interface SlidePresentation {
 export interface GenerateSlidesOptions {
     topic: string;
     num_slides?: number;
-    style?: string; // "corporate" | "creative" | "minimal" | "dark"
+    style?: string;
 }
 
-// ─── Step 1: Generate slide content via Grok LLM ─────────────────
+// ─── Check if ComfyUI is reachable ───────────────────────────────
+async function isComfyUIAvailable(): Promise<boolean> {
+    try {
+        await axios.get(`${COMFYUI_URL}/system_stats`, { timeout: 3000 });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// ─── Step 1: Generate RICH slide content via Grok LLM ─────────────
 export async function generateSlideContent(
     topic: string,
     numSlides: number = 6,
@@ -44,27 +54,44 @@ export async function generateSlideContent(
 ): Promise<SlidePresentation> {
     console.log(`🧠 Generating slide content for: "${topic}" (${numSlides} slides, ${style} style)`);
 
-    const systemPrompt = `You are a professional presentation designer. Generate structured slide content in JSON format.
-Rules:
+    const systemPrompt = `You are a world-class presentation designer and content strategist. Generate detailed, professional slide content in JSON format.
+
+STRICT RULES:
 - Create exactly ${numSlides} slides
-- Each slide must have a clear title, 3-4 bullet points, and an image_prompt
-- image_prompt should describe a clean, ${style}-style illustration suitable for a presentation background
-- image_prompt must be detailed and visual (colors, composition, style)
-- Keep bullet points concise (max 15 words each)
-- First slide should be a title/intro slide
-- Last slide should be a conclusion/summary slide
-- Return ONLY valid JSON, no markdown or extra text`;
+- Each slide MUST have:
+  • A clear, professional title
+  • 4 to 6 detailed bullet points (each 10-25 words, informative and specific)
+  • An image_prompt for AI image generation (40-80 words describing the visual)
+- Bullet points must contain REAL facts, statistics, examples, or actionable insights
+- Do NOT use generic/vague points like "Growth" or "Innovation" alone
+- Each bullet must be a complete thought with specific information
+- image_prompt must describe a photorealistic or high-quality illustration with: subject, composition, colors, style, lighting
+- First slide = Title/Introduction slide
+- Last slide = Conclusion/Call to Action slide
+- Middle slides = Deep content slides with real substance
+- Style: ${style}
+- Return ONLY valid JSON, no markdown`;
 
-    const userPrompt = `Create a professional presentation about: "${topic}"
+    const userPrompt = `Create a comprehensive, detailed presentation about: "${topic}"
 
-Return this exact JSON structure:
+Each bullet point must be a full sentence with specific facts, data, or insights — NOT just 2-3 word labels.
+
+Example of BAD bullet: "Healthcare Applications"
+Example of GOOD bullet: "AI-powered diagnostic tools can detect cancer 30% more accurately than traditional methods"
+
+Return this JSON structure:
 {
-  "title": "Presentation Title",
+  "title": "Professional Presentation Title",
   "slides": [
     {
       "title": "Slide Title",
-      "points": ["Point 1", "Point 2", "Point 3"],
-      "image_prompt": "Detailed visual description for image generation"
+      "points": [
+        "Detailed point with specific information and context",
+        "Another informative point with real-world examples or data",
+        "A third point explaining key concepts clearly",
+        "Fourth point with actionable insights or implications"
+      ],
+      "image_prompt": "Detailed visual description: subject, composition, colors, artistic style, lighting, mood — suitable for a 1920x1080 presentation slide"
     }
   ]
 }`;
@@ -79,7 +106,7 @@ Return this exact JSON structure:
                     { role: "user", content: userPrompt },
                 ],
                 temperature: 0.7,
-                max_tokens: 4000,
+                max_tokens: 8000,
                 response_format: { type: "json_object" },
             },
             {
@@ -93,7 +120,6 @@ Return this exact JSON structure:
         const content = response.data.choices[0].message.content;
         const parsed = JSON.parse(content);
 
-        // Validate structure
         if (!parsed.title || !Array.isArray(parsed.slides)) {
             throw new Error("Invalid slide structure from LLM");
         }
@@ -106,15 +132,16 @@ Return this exact JSON structure:
     }
 }
 
-// ─── Step 2: Generate images via ComfyUI ──────────────────────────
+// ─── Step 2: Generate image via ComfyUI txt2img workflow ──────────
 async function generateSlideImage(
     prompt: string,
     slideIndex: number,
     jobId: string
 ): Promise<Buffer | null> {
-    console.log(`🎨 Generating image for slide ${slideIndex + 1}: "${prompt.substring(0, 60)}..."`);
+    console.log(`🎨 [Slide ${slideIndex + 1}] Generating image...`);
+    console.log(`   Prompt: "${prompt.substring(0, 80)}..."`);
 
-    // Build a simple txt2img workflow for presentation visuals
+    // Build txt2img workflow — same as your working image generation
     const workflow: Record<string, any> = {
         "4": {
             class_type: "CheckpointLoaderSimple",
@@ -123,20 +150,20 @@ async function generateSlideImage(
         "6": {
             class_type: "CLIPTextEncode",
             inputs: {
-                text: `${prompt}, professional presentation illustration, clean design, high quality, 4k, infographic style`,
+                text: `${prompt}, professional presentation visual, clean composition, high quality, 4k, sharp details, vibrant colors`,
                 clip: ["4", 1],
             },
         },
         "7": {
             class_type: "CLIPTextEncode",
             inputs: {
-                text: "text, words, letters, watermark, logo, blurry, low quality, distorted, ugly, amateur",
+                text: "text, words, letters, numbers, watermark, logo, blurry, low quality, distorted, ugly, amateur, noisy, artifacts, oversaturated",
                 clip: ["4", 1],
             },
         },
         "5": {
             class_type: "EmptyLatentImage",
-            inputs: { width: 1920, height: 1080, batch_size: 1 },
+            inputs: { width: 1024, height: 576, batch_size: 1 },
         },
         "3": {
             class_type: "KSampler",
@@ -146,7 +173,7 @@ async function generateSlideImage(
                 negative: ["7", 0],
                 latent_image: ["5", 0],
                 seed: Math.floor(Math.random() * 10000000),
-                steps: 25,
+                steps: 20,
                 cfg: 7,
                 sampler_name: "euler_ancestral",
                 scheduler: "normal",
@@ -173,22 +200,23 @@ async function generateSlideImage(
         const clientId = `slide-gen-${jobId}-${slideIndex}`;
 
         // Submit prompt to ComfyUI
-        const promptRes = await axios.post(`${COMFYUI_URL}/prompt`, {
-            prompt: workflow,
-            client_id: clientId,
-        });
+        const promptRes = await axios.post(
+            `${COMFYUI_URL}/prompt`,
+            { prompt: workflow, client_id: clientId },
+            { timeout: 10000 }
+        );
 
         const promptId = promptRes.data.prompt_id;
         console.log(`   🚀 Queued in ComfyUI: ${promptId}`);
 
-        // Poll for completion (max 120 seconds)
+        // Poll for completion (max 180 seconds per image)
         let completed = false;
         let outputs: any = null;
-        for (let i = 0; i < 120; i++) {
+        for (let i = 0; i < 180; i++) {
             await new Promise((r) => setTimeout(r, 1000));
 
             try {
-                const historyRes = await axios.get(`${COMFYUI_URL}/history/${promptId}`);
+                const historyRes = await axios.get(`${COMFYUI_URL}/history/${promptId}`, { timeout: 5000 });
                 const history = historyRes.data[promptId];
 
                 if (history?.status?.completed) {
@@ -197,14 +225,15 @@ async function generateSlideImage(
                     break;
                 }
                 if (history?.status?.status_str === "error") {
-                    console.error(`   ❌ ComfyUI error for slide ${slideIndex + 1}`);
+                    console.error(`   ❌ ComfyUI error for slide ${slideIndex + 1}:`,
+                        JSON.stringify(history.status.messages || "unknown"));
                     return null;
                 }
             } catch {
                 // Retry
             }
 
-            if (i % 10 === 0 && i > 0) {
+            if (i % 15 === 0 && i > 0) {
                 console.log(`   ⏳ Waiting for slide ${slideIndex + 1} image... (${i}s)`);
             }
         }
@@ -225,8 +254,9 @@ async function generateSlideImage(
                         type: file.type,
                     },
                     responseType: "arraybuffer",
+                    timeout: 15000,
                 });
-                console.log(`   ✅ Image generated for slide ${slideIndex + 1}`);
+                console.log(`   ✅ Image generated for slide ${slideIndex + 1} (${Buffer.from(imgRes.data).length} bytes)`);
                 return Buffer.from(imgRes.data);
             }
         }
@@ -238,7 +268,7 @@ async function generateSlideImage(
     }
 }
 
-// ─── Step 3: Assemble PPT ─────────────────────────────────────────
+// ─── Step 3: Assemble Premium PPT ─────────────────────────────────
 async function assemblePPT(
     presentation: SlidePresentation,
     images: (Buffer | null)[],
@@ -252,165 +282,139 @@ async function assemblePPT(
     pptx.title = presentation.title;
     pptx.author = "AI Studio";
 
-    // Color palette
-    const COLORS = {
-        primary: "1a1a2e",
-        secondary: "16213e",
-        accent: "0f3460",
+    // Premium color palette
+    const C = {
+        primary: "0f172a",
+        accent: "3b82f6",
         highlight: "e94560",
         text: "ffffff",
-        subtext: "b8b8d0",
-        darkBg: "0d0d1a",
-        gradientStart: "1a1a2e",
-        gradientEnd: "16213e",
+        subtext: "94a3b8",
+        bulletAccent: "60a5fa",
+        cardBg: "1e293b",
     };
 
     for (let i = 0; i < presentation.slides.length; i++) {
         const slideData = presentation.slides[i];
         const slide = pptx.addSlide();
+        const hasImage = images[i] !== null;
 
-        // Background
-        if (images[i]) {
-            // Use generated image as background with dark overlay
+        // ─── Background ──────────────────────────────────
+        slide.background = { fill: C.primary };
+
+        // If we have a generated image, set it as full background
+        if (hasImage) {
             const base64Img = images[i]!.toString("base64");
             slide.addImage({
                 data: `image/png;base64,${base64Img}`,
-                x: 0,
-                y: 0,
-                w: "100%",
-                h: "100%",
+                x: 0, y: 0, w: "100%", h: "100%",
             });
-
-            // Dark overlay for text readability
+            // Semi-transparent dark overlay for text readability
             slide.addShape(pptx.ShapeType.rect, {
-                x: 0,
-                y: 0,
-                w: "100%",
-                h: "100%",
-                fill: { color: "000000", transparency: 50 },
+                x: 0, y: 0, w: "100%", h: "100%",
+                fill: { color: "000000", transparency: 45 },
             });
-        } else {
-            // Solid dark gradient background
-            slide.background = { fill: COLORS.primary };
         }
 
         // Accent bar at top
         slide.addShape(pptx.ShapeType.rect, {
-            x: 0,
-            y: 0,
-            w: "100%",
-            h: 0.08,
-            fill: { color: COLORS.highlight },
+            x: 0, y: 0, w: "100%", h: 0.06,
+            fill: { color: C.accent },
         });
 
         if (i === 0) {
-            // ─── Title Slide ─────────────────────
+            // ═══════════════ TITLE SLIDE ═══════════════
+            // Main title
             slide.addText(slideData.title, {
-                x: 0.8,
-                y: 1.5,
-                w: 11.5,
-                h: 2,
-                fontSize: 44,
-                fontFace: "Arial",
-                color: COLORS.text,
-                bold: true,
-                align: "center",
+                x: 0.8, y: 1.2, w: 11.5, h: 2.5,
+                fontSize: 44, fontFace: "Arial",
+                color: C.text, bold: true, align: "center",
+                shadow: { type: "outer", blur: 6, offset: 2, color: "000000", opacity: 0.5 },
             });
 
-            // Subtitle with points
+            // Subtitle / Key themes
             if (slideData.points.length > 0) {
-                slide.addText(slideData.points.join(" • "), {
-                    x: 1.5,
-                    y: 3.8,
-                    w: 10,
-                    h: 1,
-                    fontSize: 18,
-                    fontFace: "Arial",
-                    color: COLORS.subtext,
-                    align: "center",
+                const subtitle = slideData.points.slice(0, 3).join("  •  ");
+                slide.addText(subtitle, {
+                    x: 1.5, y: 3.8, w: 10, h: 1.2,
+                    fontSize: 16, fontFace: "Arial",
+                    color: C.subtext, align: "center",
+                    lineSpacingMultiple: 1.4,
                 });
             }
 
-            // Branded footer
-            slide.addText("Generated by AI Studio", {
-                x: 0.8,
-                y: 6.2,
-                w: 11.5,
-                h: 0.5,
-                fontSize: 12,
-                fontFace: "Arial",
-                color: COLORS.subtext,
-                align: "center",
-                italic: true,
+            // Decorative line
+            slide.addShape(pptx.ShapeType.rect, {
+                x: 5.4, y: 3.5, w: 2.5, h: 0.04,
+                fill: { color: C.accent },
+            });
+
+            // Footer
+            slide.addText("Generated by AI Studio  |  Powered by Grok + ComfyUI", {
+                x: 0.8, y: 6.3, w: 11.5, h: 0.5,
+                fontSize: 11, fontFace: "Arial",
+                color: C.subtext, align: "center", italic: true,
             });
         } else {
-            // ─── Content Slide ───────────────────
+            // ═══════════════ CONTENT SLIDE ═══════════════
+
+            // Content area background card (left side)
+            const contentWidth = hasImage ? 6.8 : 11.5;
+            slide.addShape(pptx.ShapeType.rect, {
+                x: 0.4, y: 0.35, w: contentWidth, h: 6.6,
+                fill: { color: C.cardBg, transparency: hasImage ? 20 : 80 },
+                rectRadius: 0.15,
+            });
+
             // Slide title
             slide.addText(slideData.title, {
-                x: 0.8,
-                y: 0.4,
-                w: 11.5,
-                h: 1,
-                fontSize: 32,
-                fontFace: "Arial",
-                color: COLORS.text,
-                bold: true,
+                x: 0.8, y: 0.5, w: contentWidth - 0.4, h: 1,
+                fontSize: 28, fontFace: "Arial",
+                color: C.text, bold: true,
             });
 
-            // Divider line
+            // Accent divider under title
             slide.addShape(pptx.ShapeType.rect, {
-                x: 0.8,
-                y: 1.4,
-                w: 3,
-                h: 0.04,
-                fill: { color: COLORS.highlight },
+                x: 0.8, y: 1.45, w: 2.5, h: 0.04,
+                fill: { color: C.accent },
             });
 
-            // Bullet points
-            const bullets = slideData.points.map((point) => ({
+            // Bullet points — detailed content
+            const bullets = slideData.points.map((point, idx) => ({
                 text: point,
                 options: {
-                    fontSize: 18,
+                    fontSize: 14,
                     fontFace: "Arial" as const,
-                    color: COLORS.text,
-                    bullet: { type: "bullet" as const, color: COLORS.highlight },
+                    color: C.text,
+                    bullet: { type: "bullet" as const, color: C.bulletAccent },
                     breakType: "none" as const,
-                    paraSpaceAfter: 14,
+                    paraSpaceAfter: 10,
+                    lineSpacingMultiple: 1.3,
                 },
             }));
 
             slide.addText(bullets, {
-                x: 0.8,
-                y: 1.8,
-                w: 6,
-                h: 4.5,
+                x: 0.8, y: 1.7,
+                w: contentWidth - 0.8, h: 5,
                 valign: "top",
-                lineSpacingMultiple: 1.5,
             });
 
-            // Image placement (right side) if available
-            if (images[i]) {
+            // Image on right side (separate, not background) — if available and it's a content slide
+            if (hasImage) {
                 const base64Img = images[i]!.toString("base64");
+                // Image card with slight rounding
                 slide.addImage({
                     data: `image/png;base64,${base64Img}`,
-                    x: 7.2,
-                    y: 1.6,
-                    w: 5.5,
-                    h: 4.8,
+                    x: 7.5, y: 0.6, w: 5.4, h: 6.1,
                     rounding: true,
+                    shadow: { type: "outer", blur: 8, offset: 3, color: "000000", opacity: 0.4 },
                 });
             }
 
             // Slide number
             slide.addText(`${i + 1} / ${presentation.slides.length}`, {
-                x: 11.5,
-                y: 6.8,
-                w: 1.5,
-                h: 0.4,
-                fontSize: 10,
-                fontFace: "Arial",
-                color: COLORS.subtext,
-                align: "right",
+                x: 11.5, y: 6.9, w: 1.5, h: 0.4,
+                fontSize: 9, fontFace: "Arial",
+                color: C.subtext, align: "right",
             });
         }
     }
@@ -418,8 +422,6 @@ async function assemblePPT(
     // Write to disk
     const filename = `slides_${jobId}.pptx`;
     const filePath = path.join(OUTPUT_DIR, filename);
-
-    // pptxgenjs write returns base64 by default in node, use writeFile
     const base64Data = (await pptx.write({ outputType: "base64" })) as string;
     fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
 
@@ -433,39 +435,48 @@ export async function generateSlides(
 ): Promise<{ filePath: string; presentation: SlidePresentation; jobId: string }> {
     const jobId = uuidv4().substring(0, 8);
     console.log(`\n🚀 ════════════════════════════════════════════════`);
-    console.log(`   AI Slide Generator — Job ${jobId}`);
+    console.log(`   AI Slide Generator v2 — Job ${jobId}`);
     console.log(`   Topic: "${options.topic}"`);
     console.log(`════════════════════════════════════════════════════\n`);
 
-    // Step 1: Generate content
+    // Step 1: Generate content via Grok
     const presentation = await generateSlideContent(
         options.topic,
         options.num_slides || 6,
         options.style || "corporate"
     );
 
-    // Step 2: Generate images (parallel, max 3 at a time)
-    console.log(`\n🎨 Generating ${presentation.slides.length} slide images...\n`);
-    const images: (Buffer | null)[] = [];
+    // Step 2: Generate images via ComfyUI (if available)
+    const comfyAvailable = await isComfyUIAvailable();
+    let images: (Buffer | null)[] = [];
 
-    // Process in batches of 3 to avoid overloading GPU
-    for (let batch = 0; batch < presentation.slides.length; batch += 3) {
-        const batchSlides = presentation.slides.slice(batch, batch + 3);
-        const batchPromises = batchSlides.map((slide, idx) =>
-            generateSlideImage(slide.image_prompt, batch + idx, jobId)
-        );
-        const batchResults = await Promise.all(batchPromises);
-        images.push(...batchResults);
+    if (comfyAvailable) {
+        console.log(`\n🎨 ComfyUI is ONLINE — Generating ${presentation.slides.length} slide images via txt2img...\n`);
+
+        // Generate images ONE at a time to avoid GPU overload
+        for (let idx = 0; idx < presentation.slides.length; idx++) {
+            const img = await generateSlideImage(
+                presentation.slides[idx].image_prompt,
+                idx,
+                jobId
+            );
+            images.push(img);
+        }
+
+        const successCount = images.filter((img) => img !== null).length;
+        console.log(`\n📊 Images generated: ${successCount}/${presentation.slides.length}`);
+    } else {
+        console.log(`\n⚠️ ComfyUI not reachable at ${COMFYUI_URL} — generating slides WITHOUT images`);
+        console.log(`   To enable images: start ComfyUI and run the API locally\n`);
+        images = presentation.slides.map(() => null);
     }
-
-    const successCount = images.filter((img) => img !== null).length;
-    console.log(`\n📊 Images generated: ${successCount}/${presentation.slides.length}`);
 
     // Step 3: Assemble PPT
     const filePath = await assemblePPT(presentation, images, jobId);
 
     console.log(`\n🎉 ════════════════════════════════════════════════`);
     console.log(`   DONE! Presentation ready: ${filePath}`);
+    console.log(`   Images included: ${images.filter(i => i !== null).length}/${presentation.slides.length}`);
     console.log(`════════════════════════════════════════════════════\n`);
 
     return { filePath, presentation, jobId };
