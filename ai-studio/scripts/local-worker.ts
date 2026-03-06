@@ -1180,11 +1180,23 @@ const generateSimpleWorkflow = (params: any) => {
         };
         const comfySampler = samplerMap[params.sampler] || "euler";
 
+        let posCondId = ID_OLD.PROMPT_POS;
+        if (params.model_id?.toLowerCase().includes("flux1-dev")) {
+            workflow["30"] = {
+                class_type: "FluxGuidance",
+                inputs: {
+                    conditioning: [ID_OLD.PROMPT_POS, 0],
+                    guidance: 3.5
+                }
+            };
+            posCondId = "30";
+        }
+
         workflow[ID_OLD.SAMPLER] = {
             class_type: "KSampler",
             inputs: {
                 model: [ID_OLD.CHECKPOINT, 0],
-                positive: [ID_OLD.PROMPT_POS, 0],
+                positive: [posCondId, 0],
                 negative: [ID_OLD.PROMPT_NEG, 0],
                 latent_image: [latentNodeId, 0],
                 seed: params.seed && params.seed !== -1 ? params.seed : Math.floor(Math.random() * 10000000),
