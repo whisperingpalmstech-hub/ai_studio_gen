@@ -16,11 +16,19 @@ const router = Router();
 // Output directory (shared with slide-generator service)
 const OUTPUT_DIR = path.resolve("slide_outputs");
 
+// Validation schema for custom slide content
+const slideContentSchema = z.object({
+    title: z.string().min(1, "Slide title is required"),
+    points: z.array(z.string()).min(1, "At least 1 bullet point required"),
+    image_prompt: z.string().optional().default(""),
+});
+
 // Validation schema
 const generateSlidesSchema = z.object({
     topic: z.string().min(3, "Topic must be at least 3 characters").max(500),
     num_slides: z.number().min(3).max(15).optional().default(6),
     style: z.enum(["corporate", "creative", "minimal", "dark"]).optional().default("corporate"),
+    slides: z.array(slideContentSchema).min(1).max(20).optional(),
 });
 
 /**
@@ -47,10 +55,11 @@ router.post(
                 throw error;
             }
 
-            console.log(`📊 Slide Generation Request from user ${user.id}: "${validated.topic}"`);
+            const isCustom = validated.slides && validated.slides.length > 0;
+            console.log(`📊 Slide Generation Request from user ${user.id}: "${validated.topic}" [${isCustom ? 'Custom Content' : 'Grok AI'}]`);
 
-            // Check credits (slide generation costs 5 credits)
-            const SLIDE_CREDIT_COST = 5;
+            // Check credits (custom content is cheaper — no LLM call)
+            const SLIDE_CREDIT_COST = isCustom ? 2 : 5;
             if (user.credits < SLIDE_CREDIT_COST) {
                 return res.status(402).json({
                     error: "Insufficient Credits",
@@ -71,6 +80,7 @@ router.post(
                 num_slides: validated.num_slides,
                 style: validated.style,
                 user_id: user.id,
+                slides: validated.slides, // If provided, skips Grok and uses custom content
             });
 
             // Read the file to send as response

@@ -40,6 +40,7 @@ export interface GenerateSlidesOptions {
     num_slides?: number;
     style?: string;
     user_id?: string; // Needed for creating jobs in Supabase
+    slides?: SlideContent[]; // Optional: user-provided custom slide content (skips Grok)
 }
 
 // ─── Step 1: Generate RICH slide content via Grok LLM ─────────────
@@ -439,18 +440,36 @@ export async function generateSlides(
     options: GenerateSlidesOptions
 ): Promise<{ filePath: string; presentation: SlidePresentation; jobId: string }> {
     const jobId = uuidv4().substring(0, 8);
+    const isCustomContent = options.slides && options.slides.length > 0;
+
     console.log(`\n🚀 ════════════════════════════════════════════════`);
     console.log(`   AI Slide Generator v3 — Job ${jobId}`);
     console.log(`   Topic: "${options.topic}"`);
-    console.log(`   Mode: Supabase Job Queue → Local Worker → ComfyUI`);
+    console.log(`   Mode: ${isCustomContent ? 'Custom Content (no LLM)' : 'Grok LLM'} → ComfyUI → PPT`);
     console.log(`════════════════════════════════════════════════════\n`);
 
-    // Step 1: Generate content via Grok
-    const presentation = await generateSlideContent(
-        options.topic,
-        options.num_slides || 6,
-        options.style || "corporate"
-    );
+    // Step 1: Use custom slides OR generate content via Grok
+    let presentation: SlidePresentation;
+
+    if (isCustomContent) {
+        // User provided their own slide content — skip Grok entirely
+        console.log(`📋 Using custom slide content (${options.slides!.length} slides provided by user)`);
+        presentation = {
+            title: options.topic,
+            slides: options.slides!.map((s) => ({
+                title: s.title || 'Untitled Slide',
+                points: s.points || [],
+                image_prompt: s.image_prompt || `Professional visual related to: ${s.title || options.topic}`,
+            })),
+        };
+    } else {
+        // AI-generated content via Grok
+        presentation = await generateSlideContent(
+            options.topic,
+            options.num_slides || 6,
+            options.style || "corporate"
+        );
+    }
 
     // Step 2: Generate images via Supabase Job Queue
     // Each image is created as a separate job in Supabase.
