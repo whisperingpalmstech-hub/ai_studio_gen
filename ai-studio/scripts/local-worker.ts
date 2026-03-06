@@ -1179,6 +1179,7 @@ const generateSimpleWorkflow = (params: any) => {
             "UniPC": "uni_pc"
         };
         const comfySampler = samplerMap[params.sampler] || "euler";
+        const scheduler = (params.sampler || '').includes('Karras') ? 'karras' : 'normal';
 
         let posCondId = ID_OLD.PROMPT_POS;
         if (params.model_id?.toLowerCase().includes("flux1-dev")) {
@@ -1203,7 +1204,7 @@ const generateSimpleWorkflow = (params: any) => {
                 steps: params.steps || 20,
                 cfg: params.cfg_scale || 7.0,
                 sampler_name: comfySampler,
-                scheduler: "normal",
+                scheduler: params.scheduler || scheduler,
                 denoise: denoise
             }
         };
@@ -1537,7 +1538,7 @@ const generateSimpleWorkflow = (params: any) => {
                 steps: Number(params.steps) || 30,
                 cfg: cfgForType,
                 sampler_name: comfySampler,
-                scheduler: scheduler,
+                scheduler: params.scheduler || scheduler,
                 denoise: autoDenoise
             }
         };

@@ -218,7 +218,7 @@ export function generateSimpleWorkflow(params: any): Record<string, any> {
                 steps: Number(params.steps) || 20,
                 cfg: Number(params.cfg_scale) || 7.0,
                 sampler_name: samplerName,
-                scheduler: schedulerName,
+                scheduler: params.scheduler || schedulerName,
                 denoise: Number(denoise)
             }
         };

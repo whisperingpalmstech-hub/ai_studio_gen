@@ -185,20 +185,28 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
 { "topic": "Future of Electric Vehicles", "num_slides": 6 }
 ```
 
-### Grok AI Mode with FLUX or SD3.5
-Pass a specific `model_id` to generate the slide images using different models.
+### 🦾 High-Fidelity & Custom Model Selections
+By default, the API generates imagery using the internal Juggernaut XL model. If you want to harness next-generation models like **Flux.1 Dev** or **Stable Diffusion 3.5**, pass the direct `.safetensors` filename in the `model_id` field.
+
+**Available Models:**
+* `juggernautXL_ragnarokBy.safetensors` (Default)
+* `flux1-dev-fp8.safetensors` (Best Quality, High Fidelity)
+* `sd3.5_large_fp8_scaled.safetensors` (Great Prompt Adherence)
+
+#### Example: Flux.1 Dev
 ```json
 { 
-  "topic": "Climate Change and Renewable Energy", 
-  "num_slides": 5, 
-  "style": "dark",
+  "topic": "Space Exploration and Colonization", 
+  "num_slides": 4, 
   "model_id": "flux1-dev-fp8.safetensors"
 }
 ```
+
+#### Example: Stable Diffusion 3.5
 ```json
 { 
   "topic": "Cybersecurity Best Practices", 
-  "num_slides": 4, 
+  "num_slides": 3, 
   "model_id": "sd3.5_large_fp8_scaled.safetensors"
 }
 ```

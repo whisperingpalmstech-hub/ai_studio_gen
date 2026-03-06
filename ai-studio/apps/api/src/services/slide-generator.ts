@@ -138,6 +138,7 @@ async function createImageJob(
     let cfgScale = 7;
     let sampler = "euler_a";
     let steps = 20;
+    let scheduler = "normal";
 
     if (isFlux) {
         cfgScale = 1; // Flux requires CFG 1.0 (without FluxGuidance) -> anything > 2.0 gets deep fried!
@@ -146,7 +147,8 @@ async function createImageJob(
     } else if (isSD35) {
         cfgScale = 4.5; // SD3.5 sweet spot
         sampler = "dpm++ 2m";
-        steps = 25;
+        scheduler = "sgm_uniform"; // SGM Uniform is excellent for SD3.5 Large
+        steps = 35; // Increased steps for better refinement
     }
 
     const params = {
@@ -158,6 +160,7 @@ async function createImageJob(
         cfg_scale: cfgScale,
         seed: Math.floor(Math.random() * 10000000),
         sampler: sampler,
+        scheduler: scheduler,
         batch_size: 1,
         batch_count: 1,
         ...(modelId ? { model_id: modelId } : {}),
