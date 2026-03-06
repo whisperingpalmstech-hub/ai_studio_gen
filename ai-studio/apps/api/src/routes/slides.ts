@@ -29,6 +29,7 @@ const generateSlidesSchema = z.object({
     num_slides: z.number().min(3).max(15).optional().default(6),
     style: z.enum(["corporate", "creative", "minimal", "dark"]).optional().default("corporate"),
     slides: z.array(slideContentSchema).min(1).max(20).optional(),
+    model_id: z.string().optional(),
 });
 
 /**
@@ -67,6 +68,7 @@ router.post(
                 style: validated.style,
                 user_id: user.id,
                 slides: validated.slides, // If provided, skips Grok and uses custom content
+                model_id: validated.model_id, // Custom model for images (Flux, SD3.5, etc.)
             });
 
             // Read the file to send as response

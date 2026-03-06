@@ -41,6 +41,7 @@ export interface GenerateSlidesOptions {
     style?: string;
     user_id?: string; // Needed for creating jobs in Supabase
     slides?: SlideContent[]; // Optional: user-provided custom slide content (skips Grok)
+    model_id?: string; // Optional: specific model to use for image generation
 }
 
 // ─── Step 1: Generate RICH slide content via Grok LLM ─────────────
@@ -124,7 +125,8 @@ async function createImageJob(
     prompt: string,
     slideIndex: number,
     slideJobId: string,
-    userId: string
+    userId: string,
+    modelId?: string
 ): Promise<string> {
     const jobId = uuidv4();
     console.log(`🎨 [Slide ${slideIndex + 1}] Creating image job: ${jobId}`);
@@ -141,6 +143,7 @@ async function createImageJob(
         sampler: "euler_a",
         batch_size: 1,
         batch_count: 1,
+        ...(modelId ? { model_id: modelId } : {}),
     };
 
     // Insert job into Supabase — the local worker will pick it up
@@ -232,11 +235,12 @@ async function generateSlideImage(
     prompt: string,
     slideIndex: number,
     slideJobId: string,
-    userId: string
+    userId: string,
+    modelId?: string
 ): Promise<Buffer | null> {
     try {
         // Step 1: Create the job in Supabase
-        const jobId = await createImageJob(prompt, slideIndex, slideJobId, userId);
+        const jobId = await createImageJob(prompt, slideIndex, slideJobId, userId, modelId);
 
         // Step 2: Wait for the local worker to process it
         const imageUrls = await waitForJobCompletion(jobId, slideIndex);
@@ -472,7 +476,8 @@ export async function generateSlides(
                 presentation.slides[idx].image_prompt,
                 idx,
                 jobId,
-                options.user_id
+                options.user_id,
+                options.model_id
             );
             images.push(img);
         }
