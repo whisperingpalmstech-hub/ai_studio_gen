@@ -132,15 +132,32 @@ async function createImageJob(
     console.log(`🎨 [Slide ${slideIndex + 1}] Creating image job: ${jobId}`);
     console.log(`   Prompt: "${prompt.substring(0, 80)}..."`);
 
+    const isFlux = modelId?.toLowerCase().includes("flux");
+    const isSD35 = modelId?.toLowerCase().includes("sd3.5");
+
+    let cfgScale = 7;
+    let sampler = "euler_a";
+    let steps = 20;
+
+    if (isFlux) {
+        cfgScale = 1; // Flux requires CFG 1.0 (without FluxGuidance) -> anything > 2.0 gets deep fried!
+        sampler = "euler";
+        steps = 25;
+    } else if (isSD35) {
+        cfgScale = 4.5; // SD3.5 sweet spot
+        sampler = "dpm++ 2m";
+        steps = 25;
+    }
+
     const params = {
         prompt: `${prompt}, professional presentation visual, clean composition, high quality, 4k, sharp details, vibrant colors`,
         negative_prompt: "text, words, letters, numbers, watermark, logo, blurry, low quality, distorted, ugly, amateur, noisy, artifacts, oversaturated",
         width: 1024,
         height: 576,
-        steps: 20,
-        cfg_scale: 7,
+        steps: steps,
+        cfg_scale: cfgScale,
         seed: Math.floor(Math.random() * 10000000),
-        sampler: "euler_a",
+        sampler: sampler,
         batch_size: 1,
         batch_count: 1,
         ...(modelId ? { model_id: modelId } : {}),
