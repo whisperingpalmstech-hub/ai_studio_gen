@@ -51,47 +51,33 @@ export async function generateSlideContent(
 ): Promise<SlidePresentation> {
     console.log(`🧠 Generating slide content for: "${topic}" (${numSlides} slides, ${style} style)`);
 
-    const systemPrompt = `You are a world-class presentation designer and content strategist. Generate detailed, professional slide content in JSON format.
+    const systemPrompt = `You are a professional presentation generator. 
+CRITICAL RULE: The USER instruction is the primary directive. 
+If the user specifies any number of slides, a specific tone, a different language, or a unique structure, you MUST follow the user's instruction exactly. 
+The provided defaults (slide count, style) are ONLY fallbacks if the user is not specific.
 
-STRICT RULES:
-- Create exactly ${numSlides} slides
-- Each slide MUST have:
-  • A clear, professional title
-  • 4 to 6 detailed bullet points (each 10-25 words, informative and specific)
-  • An image_prompt for AI image generation (40-80 words describing the visual)
-- Bullet points must contain REAL facts, statistics, examples, or actionable insights
-- Do NOT use generic/vague points like "Growth" or "Innovation" alone
-- Each bullet must be a complete thought with specific information
-- image_prompt must describe a photorealistic or high-quality illustration with: subject, composition, colors, style, lighting
-- First slide = Title/Introduction slide
-- Last slide = Conclusion/Call to Action slide
-- Middle slides = Deep content slides with real substance
-- Style: ${style}
-- Return ONLY valid JSON, no markdown`;
-
-    const userPrompt = `Create a comprehensive, detailed presentation about: "${topic}"
-
-Each bullet point must be a full sentence with specific facts, data, or insights — NOT just 2-3 word labels.
-
-Example of BAD bullet: "Healthcare Applications"
-Example of GOOD bullet: "AI-powered diagnostic tools can detect cancer 30% more accurately than traditional methods"
-
-Return this JSON structure:
+Always return the result in this JSON format:
 {
-  "title": "Professional Presentation Title",
+  "title": "Presentation Title",
   "slides": [
     {
       "title": "Slide Title",
-      "points": [
-        "Detailed point with specific information and context",
-        "Another informative point with real-world examples or data",
-        "A third point explaining key concepts clearly",
-        "Fourth point with actionable insights or implications"
-      ],
-      "image_prompt": "Detailed visual description: subject, composition, colors, artistic style, lighting, mood — suitable for a 1920x1080 presentation slide"
+      "points": ["Full detailed sentence 1", "Full detailed sentence 2", "..."],
+      "image_prompt": "Visual description for AI image generation"
     }
   ]
 }`;
+
+    const userPrompt = `USER REQUEST: "${topic}"
+
+---
+CONTEXT & DEFAULTS (Use only if not overridden by the USER REQUEST above):
+- Target Slide Count: ${numSlides}
+- Target Style: ${style}
+- Content Quality: Each slide should have 4-6 high-value, fact-based bullet points.
+- Images: Each slide needs a descriptive image_prompt for SDXL (subject, lighting, photorealistic).
+
+FINAL REMINDER: Follow the USER REQUEST above first and foremost.`;
 
     try {
         const response = await axios.post(
@@ -102,7 +88,7 @@ Return this JSON structure:
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt },
                 ],
-                temperature: 0.7,
+                temperature: 0.85, // Higher creativity to ensure it breaks out of 'corporate' defaults if asked
                 max_tokens: 8000,
                 response_format: { type: "json_object" },
             },
