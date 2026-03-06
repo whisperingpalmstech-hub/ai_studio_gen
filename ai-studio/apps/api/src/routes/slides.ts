@@ -58,20 +58,6 @@ router.post(
             const isCustom = validated.slides && validated.slides.length > 0;
             console.log(`📊 Slide Generation Request from user ${user.id}: "${validated.topic}" [${isCustom ? 'Custom Content' : 'Grok AI'}]`);
 
-            // Check credits (custom content is cheaper — no LLM call)
-            const SLIDE_CREDIT_COST = isCustom ? 2 : 5;
-            if (user.credits < SLIDE_CREDIT_COST) {
-                return res.status(402).json({
-                    error: "Insufficient Credits",
-                    message: `Slide generation requires ${SLIDE_CREDIT_COST} credits. You have ${user.credits}.`,
-                });
-            }
-
-            // Deduct credits
-            await (supabaseAdmin.from("profiles") as any)
-                .update({ credits: user.credits - SLIDE_CREDIT_COST })
-                .eq("id", user.id);
-
             // Generate slides (this is the main pipeline)
             // user_id is needed so the service can create image jobs in Supabase
             // → local worker picks them up → ComfyUI generates → uploads to Storage

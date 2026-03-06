@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AuthenticatedRequest } from "../middleware/auth.js";
 import { jobQueue } from "../queues/job-queue.js";
 import { supabaseAdmin } from "../services/supabase.js";
-import { BadRequestError, InsufficientCreditsError, NotFoundError } from "../middleware/error.js";
+import { BadRequestError, NotFoundError } from "../middleware/error.js";
 import { config } from "../config/index.js";
 import { v4 as uuidv4 } from "uuid";
 import { validateModelWorkflow } from "../services/model-registry.js";
@@ -226,10 +226,6 @@ router.post("/", async (req: AuthenticatedRequest, res: Response, next: NextFunc
         const batchMultiplier = (validatedParams.batch_size || 1) * (validatedParams.batch_count || 1);
         const creditCost = baseCost * batchMultiplier;
 
-        // Check credits
-        if (user.credits < creditCost) {
-            throw new InsufficientCreditsError(creditCost, user.credits);
-        }
 
         // Create job in database
         const jobId = uuidv4();
@@ -271,16 +267,6 @@ router.post("/", async (req: AuthenticatedRequest, res: Response, next: NextFunc
             }
         );
 
-        // Deduct credits
-        const { error: creditError } = await (supabaseAdmin
-            .from("profiles") as any)
-            .update({ credits: user.credits - creditCost })
-            .eq("id", user.id);
-
-        if (creditError) {
-            console.error("Failed to deduct credits:", creditError);
-            // Ideally rollback job creation here, but for now we proceed
-        }
 
         // Update job status to queued
         await ((supabaseAdmin as any)

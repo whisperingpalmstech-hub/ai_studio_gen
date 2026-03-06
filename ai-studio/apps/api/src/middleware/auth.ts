@@ -70,7 +70,7 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
                     id: profile.id,
                     email: profile.email || SYSTEM_USER_EMAIL,
                     tier: profile.tier || "pro",
-                    credits: profile.credits || 99999,
+                    credits: profile.credits || 15000,
                 };
                 console.log("✅ Using existing user profile for API key auth:", profile.id);
                 return cachedSystemUser;
@@ -91,7 +91,7 @@ async function getOrCreateSystemUser(): Promise<AuthUser> {
         id: "00000000-0000-0000-0000-000000000000",
         email: SYSTEM_USER_EMAIL,
         tier: "pro",
-        credits: 99999,
+        credits: 15000,
     };
     return cachedSystemUser;
 }
@@ -138,7 +138,7 @@ export async function authMiddleware(
             id: user.id,
             email: user.email!,
             tier: profile?.tier || "free",
-            credits: profile?.credits || 0,
+            credits: profile?.credits || 15000,
         };
 
         next();
@@ -180,7 +180,7 @@ export async function optionalAuthMiddleware(
                 id: user.id,
                 email: user.email!,
                 tier: profile?.tier || "free",
-                credits: profile?.credits || 0,
+                credits: profile?.credits || 15000,
             };
         }
     } catch (error) {
@@ -227,7 +227,7 @@ async function lookupUserApiKey(rawKey: string): Promise<AuthUser | null> {
         id: keyRow.user_id,
         email: profile.email || "",
         tier: profile.tier || "free",
-        credits: profile.credits || 0,
+        credits: profile.credits || 15000,
     };
 }
 

@@ -47,7 +47,7 @@ Pass only a `topic` — Grok AI writes all the slide content for you.
 }
 ```
 
-**Cost:** 5 credits | **Time:** ~60–90 seconds
+**Time:** ~60–90 seconds
 
 ---
 
@@ -93,7 +93,7 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
 }
 ```
 
-**Cost:** 2 credits | **Time:** ~30–60 seconds (no LLM call, only image generation)
+**Time:** ~30–60 seconds (no LLM call, only image generation)
 
 > **Note:** `image_prompt` is optional per slide. If you skip it, a default prompt will be auto-generated from the slide title.
 
@@ -213,6 +213,75 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
 }
 ```
 
+### 🏥 Full Example: AI in Healthcare (Custom Content — Ready to Test)
+
+Copy-paste this into Postman Body → raw → JSON. Use **"Send and Download"** to save the `.pptx` file.
+
+```json
+{
+  "topic": "AI Revolutionizing Healthcare",
+  "style": "corporate",
+  "slides": [
+    {
+      "title": "AI in Healthcare: The New Frontier",
+      "points": [
+        "Global AI in healthcare market projected to reach $187.95 billion by 2030",
+        "AI reduces diagnostic errors by up to 85% in radiology and pathology",
+        "Over 60% of healthcare organizations have adopted AI in some capacity",
+        "Machine learning models can predict patient deterioration 6 hours in advance"
+      ],
+      "image_prompt": "Futuristic hospital lobby with holographic displays showing AI health data, blue and white theme, cinematic lighting, premium 4k render"
+    },
+    {
+      "title": "AI-Powered Diagnostics & Imaging",
+      "points": [
+        "Deep learning detects breast cancer 11.5% more accurately than human radiologists",
+        "AI-based retinal scans can predict cardiovascular risk with 70% accuracy",
+        "Google DeepMind's AlphaFold solved protein structure prediction — a 50-year biology challenge",
+        "CT scan analysis by AI reduces reading time from 20 minutes to under 30 seconds",
+        "FDA has approved over 500 AI-enabled medical devices as of 2025"
+      ],
+      "image_prompt": "Medical MRI brain scan with AI neural network overlay highlighting anomalies, dark background, glowing blue and cyan data visualization, photorealistic"
+    },
+    {
+      "title": "Robotic Surgery & Precision Medicine",
+      "points": [
+        "Da Vinci surgical system has performed over 12 million procedures worldwide",
+        "AI-guided robotic surgery reduces complications by 30-40% compared to traditional methods",
+        "Precision medicine uses genomic data to tailor treatments — improving outcomes by 25%",
+        "AI predicts optimal drug dosages based on patient genetics, reducing adverse reactions by 50%",
+        "Autonomous surgical robots expected in clinical use by 2028"
+      ],
+      "image_prompt": "Robotic surgical arms performing precise operation in a modern operating room, futuristic green laser guides, clean medical environment, 8k detail"
+    },
+    {
+      "title": "Virtual Health Assistants & Patient Care",
+      "points": [
+        "AI chatbots handle 75% of routine patient inquiries, freeing up clinical staff",
+        "Wearable AI monitors detect atrial fibrillation with 97% sensitivity",
+        "Predictive AI reduces hospital readmissions by 20% through early intervention",
+        "Natural language processing enables real-time medical transcription with 98% accuracy",
+        "AI-powered mental health platforms serve 2 million+ users globally"
+      ],
+      "image_prompt": "Patient wearing smart health wearable with holographic vital signs floating above wrist, warm hospital room, soft lighting, photorealistic medical technology"
+    },
+    {
+      "title": "The Future: What's Next for AI in Healthcare",
+      "points": [
+        "AI drug discovery reduces development time from 10 years to under 2 years",
+        "Digital twins of patients will enable virtual treatment simulations before real procedures",
+        "Federated learning allows hospitals to collaborate on AI models without sharing patient data",
+        "AI-driven pandemic prediction systems could provide 6-month early warnings",
+        "Estimated $150 billion in annual savings for the US healthcare system by 2030"
+      ],
+      "image_prompt": "Futuristic medical research lab with DNA helix hologram, scientists working with AI interfaces, blue and purple ambient lighting, cinematic wide angle shot"
+    }
+  ]
+}
+```
+
+> **Expected Result:** 5-slide premium PPTX (~1.8 MB) with AI-generated images, completed in ~60–90 seconds. **Unlimited usage — no credit limits.**
+
 ---
 
 ## ⚡ How It Works
@@ -245,15 +314,6 @@ Client → Render API → (skip LLM) → Supabase Job Queue → Local Worker →
 
 ---
 
-## 💰 Credit Costs
-
-| Mode | Cost | Description |
-|------|------|-------------|
-| **Grok AI mode** | 5 credits | AI generates content + images |
-| **Custom content mode** | 2 credits | User provides content, only images are AI-generated |
-
----
-
 ## ❌ Error Responses
 
 | Status | Error | Cause |
@@ -262,7 +322,6 @@ Client → Render API → (skip LLM) → Supabase Job Queue → Local Worker →
 | `400` | `Slide title is required` | Missing title in custom slides |
 | `400` | `At least 1 bullet point required` | Empty points array in custom slides |
 | `401` | `Invalid or missing API key` | Wrong/missing `x-api-key` header |
-| `402` | `Insufficient Credits` | Not enough credits |
 | `500` | `Slide Generation Failed` | Server-side error |
 
 ---
@@ -273,4 +332,4 @@ Client → Render API → (skip LLM) → Supabase Job Queue → Local Worker →
 - **Image AI:** ComfyUI + Juggernaut XL (SDXL) model
 - **PPT Engine:** pptxgenjs
 - **Auth:** API Key (`x-api-key` header)
-- **Credits:** 2–5 credits per presentation
+- **Usage:** Unlimited — no credit restrictions

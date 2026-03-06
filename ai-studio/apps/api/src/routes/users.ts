@@ -19,7 +19,7 @@ router.post("/upgrade", async (req: AuthenticatedRequest, res: Response) => {
         .from("profiles") as any)
         .update({
             tier: "pro",
-            credits: 1000, // Reset to 1000 on upgrade
+            credits: 15000, // 15,000 credits per month
             updated_at: new Date().toISOString()
         })
         .eq("id", user.id)
@@ -55,7 +55,7 @@ router.post("/init", async (req: AuthenticatedRequest, res: Response) => {
         .insert({
             id: user.id,
             email: user.email,
-            credits: 25, // Default for new users
+            credits: 15000, // 15,000 credits per month for all users
             tier: "free",
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
