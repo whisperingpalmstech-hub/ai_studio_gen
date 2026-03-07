@@ -527,9 +527,15 @@ export async function generateSlides(
         console.log(`📋 Using custom slide content (${options.slides!.length} slides provided by user)`);
         presentation = {
             title: options.topic,
-            slides: options.slides!.map((s) => ({
+            slides: options.slides!.map((s, idx) => ({
+                slideNumber: s.slideNumber ?? (idx + 1),
+                slideType: s.slideType || 'content',
                 title: s.title || 'Untitled Slide',
+                subtitle: s.subtitle,
                 points: s.points || [],
+                speakerNotes: s.speakerNotes,
+                visualDescription: s.visualDescription,
+                colorAccent: s.colorAccent,
                 image_prompt: s.image_prompt || `Professional visual related to: ${s.title || options.topic}`,
             })),
         };

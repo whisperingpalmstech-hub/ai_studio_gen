@@ -133,9 +133,23 @@ router.post(
                 validated.style,
             );
 
+            // Build slide type stats
+            const slideTypes: Record<string, number> = {};
+            presentation.slides.forEach((s: any) => {
+                const t = s.slideType || 'content';
+                slideTypes[t] = (slideTypes[t] || 0) + 1;
+            });
+
             return res.json({
                 success: true,
                 presentation,
+                summary: presentation.summary || `Presentation on: ${validated.topic}`,
+                generatedAt: new Date().toISOString(),
+                stats: {
+                    totalSlides: presentation.slides.length,
+                    slideTypes,
+                    estimatedDuration: `${Math.round(presentation.slides.length * 2.5)} minutes`,
+                },
             });
         } catch (error: any) {
             console.error("❌ Slide JSON error:", error.message);
