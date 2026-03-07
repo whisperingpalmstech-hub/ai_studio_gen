@@ -341,6 +341,13 @@ async function assemblePPT(
         const slide = pptx.addSlide();
         const hasImage = images[i] !== null;
 
+        const slideColorAccent = slideData.colorAccent ? slideData.colorAccent.replace('#', '') : C.accent;
+
+        // Add Speaker Notes
+        if (slideData.speakerNotes) {
+            slide.addNotes(slideData.speakerNotes);
+        }
+
         // ─── Background ──────────────────────────────────
         slide.background = { fill: C.primary };
 
@@ -361,7 +368,7 @@ async function assemblePPT(
         // Accent bar at top
         slide.addShape(pptx.ShapeType.rect, {
             x: 0, y: 0, w: "100%", h: 0.06,
-            fill: { color: C.accent },
+            fill: { color: slideColorAccent },
         });
 
         if (i === 0) {
@@ -395,7 +402,7 @@ async function assemblePPT(
             // Decorative line
             slide.addShape(pptx.ShapeType.rect, {
                 x: 5.4, y: 3.5, w: 2.5, h: 0.04,
-                fill: { color: C.accent },
+                fill: { color: slideColorAccent },
             });
 
             // Footer
@@ -417,15 +424,24 @@ async function assemblePPT(
 
             // Slide title
             slide.addText(slideData.title, {
-                x: 0.8, y: 0.5, w: contentWidth - 0.4, h: 1,
+                x: 0.8, y: 0.5, w: contentWidth - 0.4, h: 0.8,
                 fontSize: 28, fontFace: "Arial",
                 color: C.text, bold: true,
             });
 
+            // Subtitle on Content Slide
+            if (slideData.subtitle) {
+                slide.addText(slideData.subtitle, {
+                    x: 0.8, y: 1.15, w: contentWidth - 0.4, h: 0.3,
+                    fontSize: 16, fontFace: "Arial",
+                    color: C.subtext, italic: true,
+                });
+            }
+
             // Accent divider under title
             slide.addShape(pptx.ShapeType.rect, {
                 x: 0.8, y: 1.45, w: 2.5, h: 0.04,
-                fill: { color: C.accent },
+                fill: { color: slideColorAccent },
             });
 
             // Bullet points — detailed content
@@ -437,7 +453,7 @@ async function assemblePPT(
                         fontSize: 14,
                         fontFace: "Arial" as const,
                         color: C.text,
-                        bullet: { type: "bullet" as const, color: C.bulletAccent },
+                        bullet: { type: "bullet" as const, color: slideColorAccent },
                         breakType: "none" as const,
                         paraSpaceAfter: 10,
                         lineSpacingMultiple: 1.3,
