@@ -30,10 +30,24 @@ export interface SlideContent {
     title: string;
     subtitle?: string;
     points?: string[];
+    bulletPoints?: string[];
     speakerNotes?: string;
     visualDescription?: string;
     colorAccent?: string;
     image_prompt: string;
+    // NotebookLM advanced fields
+    infographicData?: {
+        type: string;
+        items: { value: string; label: string; description?: string; color?: string }[];
+    };
+    diagramData?: {
+        type: string;
+        centerLabel?: string;
+        nodes: { id: string; label: string; level: number; parentId: string | null; color?: string }[];
+        connections: { from: string; to: string }[];
+    };
+    leftColumn?: { title: string; points: string[] };
+    rightColumn?: { title: string; points: string[] };
 }
 
 export interface SlidePresentation {
@@ -67,10 +81,20 @@ Your PRIMARY GOAL is to serve the user's request above all else. THE USER PROMPT
 
 NOTEBOOKLM DESIGN RULES (Apply these IF they do not conflict with the user's request):
 1. ONE clear message per slide.
-2. Text must be concise: Bullet points max 5-8 words each.
-3. The FIRST slide MUST be an introduction/title slide.
-4. The LAST slide MUST be a summary/key takeaways slide.
-5. Create a descriptive \`image_prompt\` for an AI image generator to produce a slide background or visual.
+2. Text must be concise: Bullet points max 5-8 words each, max 4-5 bullets.
+3. The FIRST slide MUST be type "title".
+4. The LAST slide MUST be type "summary".
+5. Include at least one "two-column" or "infographic" slide for variety.
+6. Create a descriptive \`image_prompt\` for an AI image generator.
+
+SLIDE TYPES AVAILABLE:
+- "title"       : Opening slide with title + subtitle
+- "content"     : Standard bullet points
+- "two-column"  : Side-by-side comparison (MUST include leftColumn + rightColumn)
+- "infographic" : Statistics with big numbers (MUST include infographicData)
+- "diagram"     : Flowcharts, cycles
+- "quote"       : Key definitions or memorable phrases
+- "summary"     : Recap with key takeaways
 
 Always return exactly this JSON format:
 {
@@ -82,14 +106,38 @@ Always return exactly this JSON format:
   "slides": [
     {
       "slideNumber": 1,
-      "slideType": "title|content|two-column|infographic|summary",
+      "slideType": "title",
       "title": "Slide Title",
       "subtitle": "Optional subtitle",
-      "speakerNotes": "Detailed speaker notes",
+      "speakerNotes": "Detailed speaker notes for presenter",
       "visualDescription": "Layout guidance",
       "colorAccent": "#1E40AF",
       "points": ["Short punchy point 1", "Short punchy point 2"],
       "image_prompt": "Visual description for AI image generation"
+    },
+    {
+      "slideNumber": 2,
+      "slideType": "two-column",
+      "title": "Comparison Title",
+      "leftColumn": { "title": "Option A", "points": ["Point 1", "Point 2"] },
+      "rightColumn": { "title": "Option B", "points": ["Point 1", "Point 2"] },
+      "speakerNotes": "Speaker notes here",
+      "colorAccent": "#06B6D4",
+      "image_prompt": "Visual for this slide"
+    },
+    {
+      "slideNumber": 3,
+      "slideType": "infographic",
+      "title": "Key Statistics",
+      "infographicData": {
+        "type": "stats",
+        "items": [
+          { "value": "85%", "label": "Accuracy", "description": "Model precision", "color": "#1E40AF" }
+        ]
+      },
+      "speakerNotes": "Speaker notes here",
+      "colorAccent": "#3B82F6",
+      "image_prompt": "Visual for this slide"
     }
   ]
 }`;
@@ -412,7 +460,11 @@ async function assemblePPT(
                 color: C.subtext, align: "center", italic: true,
             });
         } else {
-            // ═══════════════ CONTENT SLIDE ═══════════════
+            // ═══════════════ CONTENT SLIDE (type-aware) ═══════════════
+            const sType = slideData.slideType || 'content';
+
+            // Merge bulletPoints into points (NotebookLM uses both)
+            const allPoints = slideData.points || slideData.bulletPoints || [];
 
             // Content area background card (left side)
             const contentWidth = hasImage ? 6.8 : 11.5;
@@ -444,10 +496,73 @@ async function assemblePPT(
                 fill: { color: slideColorAccent },
             });
 
-            // Bullet points — detailed content
-            const pointsToRender = slideData.points || [];
-            if (pointsToRender.length > 0) {
-                const bullets = pointsToRender.map((point, idx) => ({
+            // ─── TWO-COLUMN LAYOUT ─────────────────────────
+            if (sType === 'two-column' && slideData.leftColumn && slideData.rightColumn) {
+                const colW = (contentWidth - 1.2) / 2;
+
+                // Left column header
+                slide.addText(slideData.leftColumn.title, {
+                    x: 0.8, y: 1.7, w: colW, h: 0.5,
+                    fontSize: 18, fontFace: "Arial", color: slideColorAccent, bold: true,
+                });
+                // Left column bullets
+                const leftBullets = slideData.leftColumn.points.map(p => ({
+                    text: p, options: { fontSize: 13, fontFace: "Arial" as const, color: C.text, bullet: { type: "bullet" as const, color: slideColorAccent }, paraSpaceAfter: 8 },
+                }));
+                slide.addText(leftBullets, { x: 0.8, y: 2.2, w: colW, h: 4.5, valign: "top" as const });
+
+                // Vertical divider
+                slide.addShape(pptx.ShapeType.rect, {
+                    x: 0.8 + colW + 0.15, y: 1.7, w: 0.03, h: 4.8,
+                    fill: { color: C.subtext },
+                });
+
+                // Right column header
+                slide.addText(slideData.rightColumn.title, {
+                    x: 0.8 + colW + 0.4, y: 1.7, w: colW, h: 0.5,
+                    fontSize: 18, fontFace: "Arial", color: slideColorAccent, bold: true,
+                });
+                // Right column bullets
+                const rightBullets = slideData.rightColumn.points.map(p => ({
+                    text: p, options: { fontSize: 13, fontFace: "Arial" as const, color: C.text, bullet: { type: "bullet" as const, color: slideColorAccent }, paraSpaceAfter: 8 },
+                }));
+                slide.addText(rightBullets, { x: 0.8 + colW + 0.4, y: 2.2, w: colW, h: 4.5, valign: "top" as const });
+
+                // ─── INFOGRAPHIC LAYOUT ────────────────────────
+            } else if (sType === 'infographic' && slideData.infographicData) {
+                const items = slideData.infographicData.items;
+                const cardW = Math.min(3.5, (contentWidth - 1.6) / Math.max(items.length, 1));
+                items.forEach((item, idx) => {
+                    const xPos = 0.8 + idx * (cardW + 0.3);
+                    const itemColor = item.color ? item.color.replace('#', '') : slideColorAccent;
+                    // Stat card background
+                    slide.addShape(pptx.ShapeType.rect, {
+                        x: xPos, y: 2.0, w: cardW, h: 3.5,
+                        fill: { color: C.cardBg }, rectRadius: 0.15,
+                        shadow: { type: "outer" as const, blur: 4, offset: 2, color: "000000", opacity: 0.3 },
+                    });
+                    // Big value
+                    slide.addText(item.value, {
+                        x: xPos, y: 2.2, w: cardW, h: 1.2,
+                        fontSize: 36, fontFace: "Arial", color: itemColor, bold: true, align: "center",
+                    });
+                    // Label
+                    slide.addText(item.label, {
+                        x: xPos + 0.15, y: 3.4, w: cardW - 0.3, h: 0.6,
+                        fontSize: 14, fontFace: "Arial", color: C.text, bold: true, align: "center",
+                    });
+                    // Description
+                    if (item.description) {
+                        slide.addText(item.description, {
+                            x: xPos + 0.15, y: 4.0, w: cardW - 0.3, h: 0.8,
+                            fontSize: 11, fontFace: "Arial", color: C.subtext, align: "center",
+                        });
+                    }
+                });
+
+                // ─── DEFAULT: BULLET POINTS ────────────────────
+            } else if (allPoints.length > 0) {
+                const bullets = allPoints.map((point) => ({
                     text: point,
                     options: {
                         fontSize: 14,
@@ -533,10 +648,15 @@ export async function generateSlides(
                 title: s.title || 'Untitled Slide',
                 subtitle: s.subtitle,
                 points: s.points || [],
+                bulletPoints: s.bulletPoints,
                 speakerNotes: s.speakerNotes,
                 visualDescription: s.visualDescription,
                 colorAccent: s.colorAccent,
                 image_prompt: s.image_prompt || `Professional visual related to: ${s.title || options.topic}`,
+                infographicData: s.infographicData,
+                diagramData: s.diagramData,
+                leftColumn: s.leftColumn,
+                rightColumn: s.rightColumn,
             })),
         };
     } else {

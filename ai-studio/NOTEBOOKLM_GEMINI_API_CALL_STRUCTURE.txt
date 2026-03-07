@@ -1,0 +1,611 @@
+================================================================================
+NOTEBOOKLM-STYLE GENERATION — COMPLETE GEMINI API CALL STRUCTURE
+File: src/services/notebookLMSlideGenerator.ts
+================================================================================
+
+OVERVIEW
+--------
+The NotebookLM generation pipeline makes 5 types of Gemini API calls across 4 stages.
+Text calls go DIRECTLY from the browser using VITE_GEMINI_API_KEY (client-side env var).
+Image calls go via Supabase Edge Function (gemini-ebook-image-generator) to keep
+the image API key server-side and avoid CORS.
+
+BASE CONSTANTS
+--------------
+GEMINI_API_BASE     = https://generativelanguage.googleapis.com/v1beta/models
+GEMINI_TEXT_MODEL   = gemini-3-pro-preview
+GEMINI_IMAGE_MODEL  = gemini-3-pro-image-preview
+TEXT_TEMPERATURE    = 0.1   (very low — grounded, factual)
+IMAGE_TEMPERATURE   = 0.3   (slightly higher for visual creativity)
+
+ENTRY POINT (AdaptiveCurriculumMaker.tsx)
+-----------------------------------------
+generateNotebookLMForChapter(chapter, subjectName, onProgress)
+  1. formatChapterForNotebookLM(chapter)
+       Converts BookletChapter into a markdown string:
+       # Chapter Title
+       ## Introduction  ...text...
+       ## Section Title ...text...
+       ### Examples:    - example 1
+       ### Key Points:  - key point 1
+       ## Summary       ...text...
+       ## Practice Questions  1. question...
+
+  2. Calls generateNotebookLMSlides(request, onProgress)
+       request = {
+         lectureTitle:       chapter.chapterTitle,
+         lectureContent:     formatted markdown string,
+         targetSlides:       enhancedModeOptions.slidesPerChapter,  (default 10)
+         audience:           'intermediate',
+         theme:              NOTEBOOKLM_THEMES[enhancedModeOptions.theme],
+         includeInfographics: enhancedModeOptions.generateSlides,
+         includeMindMap:      enhancedModeOptions.generateMindMaps,
+         includeFlashcards:   enhancedModeOptions.generateFlashcards
+       }
+
+================================================================================
+CALL 1 — STAGE 1: CONTENT ANALYSIS
+================================================================================
+Function:  analyzeAndStructureContent(request)
+Model:     gemini-3-pro-preview
+Temp:      0.1
+jsonMode:  true  (responseMimeType: "application/json")
+
+---- HTTP REQUEST ----
+POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={VITE_GEMINI_API_KEY}
+Content-Type: application/json
+
+{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "<THE ANALYSIS PROMPT — see below>"
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0.1,
+    "topK": 64,
+    "topP": 0.95,
+    "maxOutputTokens": 32768,
+    "responseMimeType": "application/json"
+  }
+}
+
+---- SAMPLE PROMPT (with real values substituted) ----
+You are Google NotebookLM's content extraction system. Your PRIMARY GOAL is 100% accuracy and factual grounding.
+
+CRITICAL RULES - NEVER VIOLATE:
+1. Use ONLY information explicitly stated in the [LECTURE_CONTENT] below
+2. Copy exact terminology, names, and technical terms from the source
+3. DO NOT introduce new facts, concepts, or information not in the source
+4. Check every extracted item against the source text for accuracy
+5. If uncertain about ANY detail, mark it clearly or omit it
+6. Preserve all spelling exactly as written in the source
+
+LECTURE TITLE: "Heart Failure"
+TARGET AUDIENCE: intermediate
+FORMAT: presenter
+(presenter = more speaker notes, optimized for live presentation)
+
+[LECTURE_CONTENT]
+# Heart Failure
+
+## Introduction
+Heart failure is a clinical syndrome where the heart cannot pump sufficient
+blood to meet the body's metabolic demands. It affects over 26 million people
+worldwide and is a leading cause of hospital admissions.
+
+## Pathophysiology
+The heart compensates through the Frank-Starling mechanism, neurohormonal
+activation (RAAS, SNS), and ventricular remodeling. HFrEF (EF < 40%) involves
+systolic dysfunction. HFpEF (EF >= 50%) involves diastolic dysfunction.
+
+## Classification
+- HFrEF: Ejection fraction < 40%, systolic dysfunction
+- HFmrEF: Ejection fraction 41-49%, mildly reduced
+- HFpEF: Ejection fraction >= 50%, preserved systolic function
+
+## Management
+First-line: ACE inhibitors, Beta-blockers, MRAs, SGLT2 inhibitors (HFrEF).
+Loop diuretics for fluid overload. Device therapy: ICD, CRT for eligible patients.
+
+## Summary
+Heart failure management requires neurohormonal blockade and device therapy.
+[END_LECTURE_CONTENT]
+
+Extract ONLY from the above lecture content. Analyze thoroughly and return a JSON object with:
+
+{
+  "executiveSummary": "2-3 sentence compelling summary of the entire lecture",
+  "keyThemes": ["Array of 3-5 major themes/topics covered"],
+  "concepts": [
+    {
+      "name": "Concept name",
+      "importance": "critical|important|supplementary",
+      "definition": "Brief definition",
+      "relatedConcepts": ["Related concept names"]
+    }
+  ],
+  "dataPoints": [
+    {
+      "value": "The statistic or number",
+      "context": "What it represents",
+      "visualizationType": "stat|percentage|comparison|timeline"
+    }
+  ],
+  "processes": [
+    {
+      "name": "Process name",
+      "steps": ["Step 1", "Step 2", "Step 3"],
+      "diagramType": "flowchart|cycle|linear"
+    }
+  ],
+  "comparisons": [
+    {
+      "items": ["Item A", "Item B"],
+      "criteria": ["Criterion 1", "Criterion 2"],
+      "conclusion": "Key takeaway from comparison"
+    }
+  ],
+  "quotes": [
+    {
+      "text": "Notable quote or key statement",
+      "author": "Source if available",
+      "significance": "Why this is important"
+    }
+  ],
+  "clinicalApplications": ["Practical applications if medical/clinical content"],
+  "recommendedSlideCount": 10,
+  "suggestedSlideFlow": [
+    {
+      "slideType": "title|content|two-column|infographic|diagram|quote|summary",
+      "purpose": "What this slide should communicate",
+      "contentSource": "Which part of the content to use"
+    }
+  ]
+}
+
+ACCURACY CHECK: Before returning, verify each extracted item exists in the lecture content above.
+Return ONLY valid JSON. No additional text or explanation.
+
+---- GEMINI RESPONSE ----
+HTTP 200 OK
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{
+              \"executiveSummary\": \"Heart failure is a clinical syndrome where cardiac output is insufficient. It is classified into HFrEF (EF < 40%) and HFpEF (EF >= 50%) based on ejection fraction. Management involves neurohormonal blockade with ACE inhibitors, beta-blockers, MRAs, and SGLT2 inhibitors.\",
+              \"keyThemes\": [\"Pathophysiology\", \"Classification\", \"Compensatory Mechanisms\", \"Management\", \"Device Therapy\"],
+              \"concepts\": [
+                {
+                  \"name\": \"HFrEF\",
+                  \"importance\": \"critical\",
+                  \"definition\": \"Heart failure with reduced ejection fraction (EF < 40%), characterized by systolic dysfunction\",
+                  \"relatedConcepts\": [\"Systolic dysfunction\", \"Dilated cardiomyopathy\", \"Ventricular remodeling\"]
+                },
+                {
+                  \"name\": \"Frank-Starling Mechanism\",
+                  \"importance\": \"critical\",
+                  \"definition\": \"Intrinsic cardiac compensation where increased preload causes increased stroke volume\",
+                  \"relatedConcepts\": [\"Preload\", \"Cardiac output\", \"Ventricular remodeling\"]
+                }
+              ],
+              \"dataPoints\": [
+                { \"value\": \"EF < 40%\", \"context\": \"Diagnostic threshold for HFrEF\", \"visualizationType\": \"stat\" },
+                { \"value\": \"26 million\", \"context\": \"People affected worldwide\", \"visualizationType\": \"stat\" }
+              ],
+              \"processes\": [
+                {
+                  \"name\": \"Frank-Starling Mechanism\",
+                  \"steps\": [\"Increased preload\", \"Myocyte stretch\", \"Increased contractility\", \"Compensation\"],
+                  \"diagramType\": \"cycle\"
+                }
+              ],
+              \"comparisons\": [
+                {
+                  \"items\": [\"HFrEF\", \"HFpEF\"],
+                  \"criteria\": [\"Ejection fraction\", \"Mechanism\", \"Treatment approach\"],
+                  \"conclusion\": \"Different pathophysiology requires distinct management strategies\"
+                }
+              ],
+              \"clinicalApplications\": [
+                \"ACE inhibitor titration for HFrEF\",
+                \"Loop diuretics for fluid overload\",
+                \"ICD/CRT device therapy for eligible patients\"
+              ],
+              \"recommendedSlideCount\": 10,
+              \"suggestedSlideFlow\": [
+                { \"slideType\": \"title\", \"purpose\": \"Introduce Heart Failure topic\", \"contentSource\": \"Chapter title\" },
+                { \"slideType\": \"infographic\", \"purpose\": \"Show global burden\", \"contentSource\": \"Introduction stats\" },
+                { \"slideType\": \"diagram\", \"purpose\": \"Frank-Starling cycle\", \"contentSource\": \"Pathophysiology section\" },
+                { \"slideType\": \"two-column\", \"purpose\": \"HFrEF vs HFpEF\", \"contentSource\": \"Classification section\" },
+                { \"slideType\": \"content\", \"purpose\": \"Management overview\", \"contentSource\": \"Management section\" },
+                { \"slideType\": \"summary\", \"purpose\": \"Key takeaways\", \"contentSource\": \"Summary section\" }
+              ]
+            }"
+          }
+        ]
+      }
+    }
+  ]
+}
+
+---- CODE EXTRACTION ----
+data.candidates[0].content.parts[0].text  →  JSON.parse()  →  structuredContent object
+
+================================================================================
+CALL 2 — STAGE 2: SLIDE CONTENT GENERATION
+================================================================================
+Function:  generateSlideContent(structuredContent, request, theme)
+Model:     gemini-3-pro-preview
+Temp:      0.1
+jsonMode:  true
+
+---- HTTP REQUEST (same URL structure as Call 1) ----
+{
+  "contents": [{ "parts": [{ "text": "<SLIDE GENERATION PROMPT>" }] }],
+  "generationConfig": {
+    "temperature": 0.1,
+    "topK": 64,
+    "topP": 0.95,
+    "maxOutputTokens": 32768,
+    "responseMimeType": "application/json"
+  }
+}
+
+---- SAMPLE PROMPT (key sections) ----
+You are Google NotebookLM's slide generation system. Create exactly 10 slides.
+
+[CONTENT_ANALYSIS]
+{ ...full JSON object from Stage 1 output above... }
+[END_CONTENT_ANALYSIS]
+
+THEME COLORS:
+- Primary: #1E40AF
+- Secondary: #3B82F6
+- Accent: #06B6D4
+- Background: #F8FAFC
+- Text: #1E293B
+
+SLIDE TYPES AVAILABLE:
+- "title"       : Opening slide or section headers
+- "content"     : Standard bullet points
+- "two-column"  : Comparing/contrasting side-by-side
+- "infographic" : Statistics or process steps with icons
+- "diagram"     : Flowcharts, mind maps, cycles
+- "quote"       : Key definitions or memorable phrases
+- "summary"     : Recap with key takeaways
+- "image-focus" : Concept needing strong visual
+
+DESIGN RULES:
+1. ONE clear message per slide
+2. Bullet points max 5-8 words each, max 4-5 bullets per slide
+3. First slide MUST be type "title"
+4. Last slide MUST be type "summary"
+5. Include at least 2 infographic or diagram slides
+
+Return ONLY a valid JSON array of slides. No additional text.
+
+---- GEMINI RESPONSE ----
+{
+  "candidates": [{
+    "content": {
+      "parts": [{
+        "text": "[
+          {
+            \"slideNumber\": 1,
+            \"slideType\": \"title\",
+            \"title\": \"Heart Failure\",
+            \"subtitle\": \"Pathophysiology, Classification & Management\",
+            \"speakerNotes\": \"Welcome to this comprehensive lecture on heart failure. Today we will cover the fundamental mechanisms that lead to cardiac decompensation, the classification system, and evidence-based management strategies.\",
+            \"visualDescription\": \"Bold title slide with subtle cardiac anatomy background, dark blue gradient, large white typography.\",
+            \"colorAccent\": \"#06B6D4\"
+          },
+          {
+            \"slideNumber\": 2,
+            \"slideType\": \"infographic\",
+            \"title\": \"Global Burden of Heart Failure\",
+            \"infographicData\": {
+              \"type\": \"stats\",
+              \"items\": [
+                { \"value\": \"26M\", \"label\": \"People Affected Worldwide\", \"description\": \"Global prevalence\", \"color\": \"#1E40AF\" },
+                { \"value\": \"EF<40%\", \"label\": \"HFrEF Threshold\", \"description\": \"Systolic dysfunction\", \"color\": \"#06B6D4\" }
+              ]
+            },
+            \"speakerNotes\": \"Heart failure affects 26 million people worldwide. The ejection fraction threshold of 40% defines HFrEF.\",
+            \"visualDescription\": \"Large stat cards side by side with icon graphics, numbers prominently displayed in primary blue.\",
+            \"colorAccent\": \"#1E40AF\"
+          },
+          {
+            \"slideNumber\": 3,
+            \"slideType\": \"diagram\",
+            \"title\": \"Frank-Starling Mechanism\",
+            \"diagramData\": {
+              \"type\": \"cycle\",
+              \"centerLabel\": \"Cardiac Output\",
+              \"nodes\": [
+                { \"id\": \"1\", \"label\": \"Increased Preload\", \"level\": 1, \"parentId\": null, \"color\": \"#1E40AF\" },
+                { \"id\": \"2\", \"label\": \"Myocyte Stretch\", \"level\": 1, \"parentId\": null, \"color\": \"#3B82F6\" },
+                { \"id\": \"3\", \"label\": \"Increased Contractility\", \"level\": 1, \"parentId\": null, \"color\": \"#06B6D4\" },
+                { \"id\": \"4\", \"label\": \"Compensation\", \"level\": 1, \"parentId\": null, \"color\": \"#06B6D4\" }
+              ],
+              \"connections\": [
+                { \"from\": \"1\", \"to\": \"2\" },
+                { \"from\": \"2\", \"to\": \"3\" },
+                { \"from\": \"3\", \"to\": \"4\" },
+                { \"from\": \"4\", \"to\": \"1\" }
+              ]
+            },
+            \"speakerNotes\": \"The Frank-Starling mechanism is a fundamental compensatory response. Increased preload stretches myocytes, which increases contractility.\",
+            \"visualDescription\": \"Circular flow diagram with four nodes connected by arrows, center label showing Cardiac Output.\",
+            \"colorAccent\": \"#3B82F6\"
+          },
+          {
+            \"slideNumber\": 4,
+            \"slideType\": \"two-column\",
+            \"title\": \"HFrEF vs HFpEF\",
+            \"leftColumn\": {
+              \"title\": \"HFrEF (EF < 40%)\",
+              \"points\": [\"Systolic dysfunction\", \"Dilated ventricle\", \"ACEi + Beta-blocker\", \"ICD eligible\"]
+            },
+            \"rightColumn\": {
+              \"title\": \"HFpEF (EF >= 50%)\",
+              \"points\": [\"Diastolic dysfunction\", \"Stiff ventricle\", \"Diuretics + SGLT2i\", \"Target comorbidities\"]
+            },
+            \"speakerNotes\": \"These two subtypes have distinct pathophysiology and treatment approaches.\",
+            \"visualDescription\": \"Two equal columns separated by a vertical line, each with its own header and bullet list.\",
+            \"colorAccent\": \"#06B6D4\"
+          },
+          {
+            \"slideNumber\": 10,
+            \"slideType\": \"summary\",
+            \"title\": \"Key Takeaways\",
+            \"bulletPoints\": [\"HFrEF EF < 40%, systolic\", \"HFpEF EF >= 50%, diastolic\", \"Neurohormonal blockade first-line\", \"Device therapy for eligible\"],
+            \"speakerNotes\": \"To summarize: heart failure requires understanding both types, their mechanisms, and the evidence-based management strategies we covered today.\",
+            \"visualDescription\": \"Clean summary slide with numbered takeaway cards on a light background.\",
+            \"colorAccent\": \"#1E40AF\"
+          }
+        ]"
+      }]
+    }
+  }]
+}
+
+---- CODE EXTRACTION ----
+data.candidates[0].content.parts[0].text  →  JSON.parse()  →  slides[] array
+Each slide is validated and mapped to the NotebookLMSlide interface.
+
+================================================================================
+CALL 3 — STAGE 3: SLIDE IMAGE GENERATION  (one call per slide, with 2s delay)
+================================================================================
+Route:   Client → supabase.functions.invoke('gemini-ebook-image-generator') → Gemini
+
+---- CLIENT INVOCATION ----
+supabase.functions.invoke('gemini-ebook-image-generator', {
+  body: {
+    imagePrompt: buildNotebookLMImagePrompt(slide, theme),
+    title: slide.title
+  }
+})
+
+---- EDGE FUNCTION HTTP REQUEST TO GEMINI ----
+POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key={GEMINI_API_KEY}
+
+{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Create a PROFESSIONAL PRESENTATION SLIDE in Google NotebookLM style.\n\nSTRICT CONTENT RULES:\n- Display ONLY the content provided below\n- Use exact spelling and terminology as written\n- Keep all text READABLE and CLEAR\n\n=== SLIDE SPECIFICATIONS ===\nDimensions: 1920x1080 pixels (16:9 widescreen)\nSlide Type: INFOGRAPHIC\nSlide Number: 2\n\n=== EXACT CONTENT TO DISPLAY ===\nTITLE: \"Global Burden of Heart Failure\"\n\nINFOGRAPHIC (stats):\n- 26M: People Affected Worldwide - Global prevalence\n- EF<40%: HFrEF Threshold - Systolic dysfunction\n\n=== VISUAL STYLE GUIDANCE ===\nLarge stat cards side by side with icon graphics, numbers prominently displayed.\n\n=== DESIGN REQUIREMENTS (NotebookLM Style) ===\n\nCOLOR PALETTE:\n- Primary Color: #1E40AF (headings, key elements)\n- Secondary Color: #3B82F6 (subheadings, highlights)\n- Accent Color: #1E40AF (icons, callouts, emphasis)\n- Background: Subtle gradient from white to very light tint of #1E40AF\n- Text: #1E293B (dark, highly readable)\n\nTYPOGRAPHY:\n- Title: Large, bold, Plus Jakarta Sans style\n- Body: Clean, modern Inter style\n- Excellent contrast and readability\n\nVISUAL ELEMENTS:\n1. Clean, minimalist layout with generous whitespace\n2. Subtle accent bar on left edge (#1E40AF)\n3. Professional icons and illustrations matching content\n4. Soft shadows for depth (not harsh)\n5. Rounded corners on any boxes or cards\n6. Slide number in bottom-right corner\n7. Beautiful data visualization with icons, numbers prominently displayed\n\nSTYLE:\n- Modern, professional, Silicon Valley tech aesthetic\n- Like Google's best presentation designs\n- Clean lines, no clutter\n- Premium, polished feel\n\nOUTPUT: A complete, high-quality presentation slide image ready for professional use."
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0.7,
+    "topK": 64,
+    "topP": 0.95,
+    "maxOutputTokens": 32768
+  }
+}
+
+---- GEMINI RESPONSE (IMAGE — different from text response!) ----
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAB4AAAAB4CAYAAAC..."   (base64 encoded PNG)
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+---- EDGE FUNCTION EXTRACTS AND RETURNS ----
+const parts = data.candidates[0].content.parts
+const imagePart = parts.find(p => p.inlineData)
+
+Returns to client:
+{
+  "success": true,
+  "imageUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAB4AAAAB4CAYAAAC...",
+  "generatedAt": "2026-03-06T10:30:00.000Z"
+}
+
+---- IF IMAGE GENERATION FAILS ----
+Falls back to generateSVGSlide(slide, theme) which produces:
+  "data:image/svg+xml;base64,..."
+(A hand-crafted SVG rendering bullets, two-column, quote, or infographic data)
+
+---- RATE LIMITING ----
+await delay(2000)  // 2 second wait between each slide
+
+================================================================================
+CALLS 4, 5, 6 — STAGE 4: SUPPLEMENTARY MATERIALS  (run in parallel via Promise.all)
+================================================================================
+All three use:  gemini-3-pro-preview,  temp=0.1,  jsonMode=true
+
+---- CALL 4: MIND MAP ----
+Function: generateMindMap(structuredContent, theme)
+
+Prompt key instruction:
+  "Create a hierarchical mind map using ONLY the concepts and terms from the
+   analyzed content. Return JSON with type, centerLabel, nodes[], connections[]."
+
+Response shape:
+{
+  "type": "mindmap",
+  "centerLabel": "Heart Failure",
+  "nodes": [
+    { "id": "root",    "label": "Heart Failure",   "level": 0, "parentId": null,    "color": "#1E40AF" },
+    { "id": "b1",      "label": "Pathophysiology", "level": 1, "parentId": "root",  "color": "#3B82F6" },
+    { "id": "b2",      "label": "Classification",  "level": 1, "parentId": "root",  "color": "#3B82F6" },
+    { "id": "b3",      "label": "Management",      "level": 1, "parentId": "root",  "color": "#3B82F6" },
+    { "id": "s1a",     "label": "Frank-Starling",  "level": 2, "parentId": "b1",   "color": "#06B6D4" },
+    { "id": "s2a",     "label": "HFrEF",           "level": 2, "parentId": "b2",   "color": "#06B6D4" },
+    { "id": "s2b",     "label": "HFpEF",           "level": 2, "parentId": "b2",   "color": "#06B6D4" },
+    { "id": "s3a",     "label": "ACE Inhibitors",  "level": 2, "parentId": "b3",   "color": "#06B6D4" }
+  ],
+  "connections": [
+    { "from": "root", "to": "b1" },
+    { "from": "root", "to": "b2" },
+    { "from": "root", "to": "b3" },
+    { "from": "b1",   "to": "s1a" },
+    { "from": "b2",   "to": "s2a" },
+    { "from": "b2",   "to": "s2b" },
+    { "from": "b3",   "to": "s3a" }
+  ]
+}
+
+---- CALL 5: FLASHCARDS ----
+Function: generateFlashcards(structuredContent)
+
+Prompt key instruction:
+  "Create 15-25 high-quality study flashcards using ONLY information from
+   the analyzed content. Focus on HIGH-YIELD, exam-relevant information."
+
+Response shape (array):
+[
+  {
+    "id": "card-1",
+    "term": "HFrEF",
+    "definition": "Heart failure with reduced ejection fraction (EF < 40%), characterized by systolic dysfunction and dilated ventricle",
+    "example": "Patient with dilated cardiomyopathy and EF of 25% presenting with dyspnea",
+    "mnemonic": "rEF = Reduced EF = systolic failure (think 'r' for reduced)",
+    "category": "Definition",
+    "difficulty": "easy"
+  },
+  {
+    "id": "card-2",
+    "term": "Frank-Starling Mechanism",
+    "definition": "Intrinsic cardiac mechanism where increased ventricular filling (preload) leads to increased stroke volume via myocyte stretch",
+    "example": "During exercise, increased venous return stretches ventricle leading to stronger contraction",
+    "mnemonic": "More stretch = More force (like a rubber band)",
+    "category": "Concept",
+    "difficulty": "medium"
+  },
+  {
+    "id": "card-3",
+    "term": "First-line HFrEF Treatment",
+    "definition": "ACE inhibitors, Beta-blockers, Mineralocorticoid receptor antagonists (MRAs), and SGLT2 inhibitors form the neurohormonal blockade foundation",
+    "example": "Ramipril + Carvedilol + Spironolactone + Empagliflozin combination",
+    "mnemonic": "A-B-M-S: ACEi, Beta-blocker, MRA, SGLT2i",
+    "category": "Clinical",
+    "difficulty": "hard"
+  }
+]
+
+---- CALL 6: STUDY GUIDE ----
+Function: generateStudyGuide(structuredContent, lectureTitle)
+
+Response shape:
+{
+  "title": "Study Guide: Heart Failure",
+  "overview": "Heart failure is a clinical syndrome...",
+  "learningObjectives": [
+    "Define HFrEF and HFpEF with their ejection fraction thresholds",
+    "Explain the Frank-Starling mechanism of cardiac compensation",
+    "List first-line pharmacological treatments for HFrEF"
+  ],
+  "mainConcepts": [
+    {
+      "title": "HFrEF vs HFpEF",
+      "explanation": "Two distinct subtypes with different pathophysiology...",
+      "keyPoints": ["EF < 40% = HFrEF", "EF >= 50% = HFpEF", "EF 41-49% = HFmrEF"],
+      "clinicalRelevance": "Classification determines treatment strategy and device therapy eligibility"
+    }
+  ],
+  "summaryPoints": [
+    "Heart failure affects 26 million people worldwide",
+    "HFrEF is defined by EF < 40% and systolic dysfunction",
+    "Frank-Starling mechanism is a key compensatory response"
+  ],
+  "practiceQuestions": [
+    {
+      "question": "What ejection fraction threshold defines HFrEF?",
+      "answer": "EF < 40% defines HFrEF (Heart Failure with reduced Ejection Fraction)",
+      "type": "recall"
+    },
+    {
+      "question": "A patient has EF of 35% and dyspnea. Which 4 drugs form first-line treatment?",
+      "answer": "ACE inhibitor (or ARNi), Beta-blocker, MRA (spironolactone/eplerenone), SGLT2 inhibitor",
+      "type": "application"
+    }
+  ]
+}
+
+================================================================================
+FINAL RETURN VALUE  —  NotebookLMResponse
+================================================================================
+{
+  slides: NotebookLMSlide[],     // N slides, each with imageUrl (base64 png or svg)
+  mindMap: DiagramData,          // nodes + connections from Call 4
+  flashcards: NotebookLMFlashcard[],  // 15-25 cards from Call 5
+  studyGuide: StudyGuide,        // learning objectives + practice Q from Call 6
+  summary: string,               // executiveSummary from Stage 1
+  generatedAt: string,           // ISO timestamp
+  theme: SlideTheme,             // the theme object used throughout
+  stats: {
+    totalSlides: number,         // slides.length
+    slideTypes: Record<string, number>,  // { "title": 1, "infographic": 3, ... }
+    flashcardCount: number,      // flashcards.length
+    estimatedDuration: string    // slides.length * 2.5 minutes
+  }
+}
+
+This object gets attached to chapter as:  chapter.notebookLMContent = result
+Then used in PDF export, in-browser preview, and download functionality.
+
+================================================================================
+PROGRESS CALLBACKS  (passed through to UI)
+================================================================================
+Stage 1 complete  →  "Content analyzed successfully"       20%
+Stage 2 complete  →  "Slide layouts created"               40%
+Per-image done    →  "Generating slide N/total"            45-70%
+Stage 4 complete  →  "Study materials complete"            90%
+All done          →  "Generation complete!"               100%
+
+================================================================================
+ERROR HANDLING
+================================================================================
+- If Stage 1 JSON parse fails  → throws "Failed to analyze content structure"
+- If Stage 2 JSON parse fails  → throws "Failed to generate slide content structure"
+- If image generation fails    → falls back to SVG (no error thrown, continues)
+- If mind map fails            → returns undefined (non-fatal)
+- If flashcards fail           → returns [] (non-fatal)
+- If study guide fails         → returns undefined (non-fatal)
+- If entire NotebookLM fails   → toast shown, returns null, chapter saved without enhanced content
+
+================================================================================

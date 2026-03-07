@@ -23,10 +23,44 @@ const slideContentSchema = z.object({
     title: z.string().min(1, "Slide title is required"),
     subtitle: z.string().optional(),
     points: z.array(z.string()).optional().default([]),
+    bulletPoints: z.array(z.string()).optional(),
     speakerNotes: z.string().optional(),
     visualDescription: z.string().optional(),
     colorAccent: z.string().optional(),
     image_prompt: z.string().optional().default(""),
+    // NotebookLM advanced fields
+    infographicData: z.object({
+        type: z.string(),
+        items: z.array(z.object({
+            value: z.string(),
+            label: z.string(),
+            description: z.string().optional(),
+            color: z.string().optional(),
+        })),
+    }).optional(),
+    diagramData: z.object({
+        type: z.string(),
+        centerLabel: z.string().optional(),
+        nodes: z.array(z.object({
+            id: z.string(),
+            label: z.string(),
+            level: z.number(),
+            parentId: z.string().nullable(),
+            color: z.string().optional(),
+        })),
+        connections: z.array(z.object({
+            from: z.string(),
+            to: z.string(),
+        })),
+    }).optional(),
+    leftColumn: z.object({
+        title: z.string(),
+        points: z.array(z.string()),
+    }).optional(),
+    rightColumn: z.object({
+        title: z.string(),
+        points: z.array(z.string()),
+    }).optional(),
 });
 
 // Validation schema
