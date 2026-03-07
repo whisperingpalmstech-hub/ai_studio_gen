@@ -464,7 +464,7 @@ async function assemblePPT(
             const sType = slideData.slideType || 'content';
 
             // Merge bulletPoints into points (NotebookLM uses both)
-            const allPoints = slideData.points || slideData.bulletPoints || [];
+            const allPoints = (slideData.points && slideData.points.length > 0) ? slideData.points : (slideData.bulletPoints || []);
 
             // Content area background card (left side)
             const contentWidth = hasImage ? 6.8 : 11.5;
