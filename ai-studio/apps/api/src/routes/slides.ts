@@ -18,8 +18,14 @@ const OUTPUT_DIR = path.resolve("slide_outputs");
 
 // Validation schema for custom slide content
 const slideContentSchema = z.object({
+    slideNumber: z.number().optional(),
+    slideType: z.string().optional(),
     title: z.string().min(1, "Slide title is required"),
-    points: z.array(z.string()).min(1, "At least 1 bullet point required"),
+    subtitle: z.string().optional(),
+    points: z.array(z.string()).optional().default([]),
+    speakerNotes: z.string().optional(),
+    visualDescription: z.string().optional(),
+    colorAccent: z.string().optional(),
     image_prompt: z.string().optional().default(""),
 });
 

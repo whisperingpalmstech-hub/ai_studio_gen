@@ -60,16 +60,24 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
   "style": "corporate",
   "slides": [
     {
+      "slideNumber": 1,
+      "slideType": "title",
       "title": "Q1 Revenue Overview",
+      "subtitle": "Strong momentum heading into Q2",
       "points": [
         "Total revenue reached $12.4M, up 23% YoY",
         "SaaS subscriptions grew to 85% of total revenue",
         "Enterprise deals closed: 14 new accounts worth $3.2M",
         "Customer retention rate maintained at 96.5%"
       ],
+      "speakerNotes": "Welcome everyone to the Q1 wrap-up. As you can see, our SaaS revenue is leading the charge.",
+      "visualDescription": "Professional business chart showing upward revenue growth",
+      "colorAccent": "#06B6D4",
       "image_prompt": "Professional business chart showing upward revenue growth, blue and green corporate colors, clean infographic style"
     },
     {
+      "slideNumber": 2,
+      "slideType": "two-column",
       "title": "Regional Performance",
       "points": [
         "North America: $7.1M (57% of total, +18% growth)",
@@ -77,9 +85,12 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
         "Asia Pacific: $2.1M (17% of total, +42% growth)",
         "APAC is the fastest-growing region for the third consecutive quarter"
       ],
+      "speakerNotes": "APAC growth is staggering, primarily due to our new expansions in Tokyo and Singapore.",
       "image_prompt": "World map with highlighted regions showing sales data, modern corporate presentation visual, dark blue background"
     },
     {
+      "slideNumber": 3,
+      "slideType": "summary",
       "title": "Key Wins & Next Steps",
       "points": [
         "Signed 3 Fortune 500 clients in Q1",
@@ -87,6 +98,7 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
         "Q2 target: $14M revenue with focus on APAC expansion",
         "Hiring 25 new sales reps across all regions"
       ],
+      "speakerNotes": "Let's carry this energy forward into Q2.",
       "image_prompt": "Team celebration in modern office, professional business photography, warm lighting, achievement"
     }
   ]
@@ -95,7 +107,7 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
 
 **Time:** ~30–60 seconds (no LLM call, only image generation)
 
-> **Note:** `image_prompt` is optional per slide. If you skip it, a default prompt will be auto-generated from the slide title.
+> **Note:** We now support all NotebookLM schema properties optionally per slide (`slideNumber`, `slideType`, `subtitle`, `speakerNotes`, `visualDescription`, `colorAccent`, `image_prompt`). If you skip them, defaults apply.
 
 ---
 
@@ -106,10 +118,16 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
 | `topic` | string | ✅ Yes | — | The topic / title for the presentation |
 | `num_slides` | number | No | `6` | Number of slides (3–15) — *only used in Grok mode* |
 | `style` | string | No | `"corporate"` | Options: `corporate`, `creative`, `minimal`, `dark` |
-| `model_id` | string | No | auto | Custom AI model for images (e.g., `flux1-dev-fp8.safetensors`, `flux1-schnell-fp8.safetensors`, `sd3.5_large_fp8_scaled.safetensors`) |
+| `model_id` | string | No | auto | Custom AI model for images (e.g., `flux1-dev-fp8.safetensors`, `sd3.5_large_fp8_scaled.safetensors`) |
 | `slides` | array | No | — | Your custom slide content. If provided, **skips Grok entirely** |
 | `slides[].title` | string | ✅ (if slides) | — | Slide title |
-| `slides[].points` | string[] | ✅ (if slides) | — | Bullet points (at least 1) |
+| `slides[].points` | string[] | No | `[]` | Bullet points |
+| `slides[].subtitle` | string | No | — | Slide subtitle |
+| `slides[].speakerNotes`| string | No | — | Detailed speaker notes for presenter mode |
+| `slides[].slideType` | string | No | — | E.g. `title`, `content`, `two-column`, `infographic`, `summary` |
+| `slides[].slideNumber` | number | No | — | Manual ordering control |
+| `slides[].visualDescription`| string | No | — | Layout / Visual guidance description |
+| `slides[].colorAccent` | string | No | — | Hex code for accent element (e.g. `#1E40AF`) |
 | `slides[].image_prompt` | string | No | auto | AI image generation prompt for the slide |
 
 ### Response
@@ -153,14 +171,22 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
 
 ### Response (JSON — fast, ~3 seconds)
 
-```json
+\`\`\`json
 {
   "success": true,
   "presentation": {
     "title": "AI Revolution in Healthcare Surgery",
+    "summary": "This presentation explores the growing $40B impact of AI in surgery, lowering risks and accelerating recovery timelines.",
+    "stats": {
+      "totalSlides": 5
+    },
     "slides": [
       {
+        "slideNumber": 1,
+        "slideType": "title",
         "title": "Introduction: AI Transforming the Operating Room",
+        "subtitle": "A $40B Market Emergence",
+        "speakerNotes": "Good morning. We're here to talk about how AI is reshaping surgical outcomes globally.",
         "points": [
           "AI-powered surgical systems projected to reach $40B market by 2030",
           "Machine learning predicts surgical complications with 94% accuracy",
@@ -171,7 +197,7 @@ Pass your own `slides` array — skips Grok entirely, uses YOUR content.
     ]
   }
 }
-```
+\`\`\`
 
 ---
 

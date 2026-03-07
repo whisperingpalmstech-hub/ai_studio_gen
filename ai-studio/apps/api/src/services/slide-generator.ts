@@ -25,13 +25,23 @@ if (!fs.existsSync(OUTPUT_DIR)) {
 
 // ─── Types ────────────────────────────────────────────────────────
 export interface SlideContent {
+    slideNumber?: number;
+    slideType?: string;
     title: string;
-    points: string[];
+    subtitle?: string;
+    points?: string[];
+    speakerNotes?: string;
+    visualDescription?: string;
+    colorAccent?: string;
     image_prompt: string;
 }
 
 export interface SlidePresentation {
     title: string;
+    summary?: string;
+    stats?: {
+        totalSlides: number;
+    };
     slides: SlideContent[];
 }
 
@@ -52,18 +62,33 @@ export async function generateSlideContent(
 ): Promise<SlidePresentation> {
     console.log(`🧠 Generating slide content for: "${topic}" (${numSlides} slides, ${style} style)`);
 
-    const systemPrompt = `You are a professional presentation generator. 
-CRITICAL RULE: The USER instruction is the primary directive. 
-If the user specifies any number of slides, a specific tone, a different language, or a unique structure, you MUST follow the user's instruction exactly. 
-The provided defaults (slide count, style) are ONLY fallbacks if the user is not specific.
+    const systemPrompt = `You are an expert presentation generator inspired by Google NotebookLM. 
+Your PRIMARY GOAL is to serve the user's request above all else. THE USER PROMPT HAS ABSOLUTE PRIORITY OVER THESE SYSTEM GUIDELINES.
 
-Always return the result in this JSON format:
+NOTEBOOKLM DESIGN RULES (Apply these IF they do not conflict with the user's request):
+1. ONE clear message per slide.
+2. Text must be concise: Bullet points max 5-8 words each.
+3. The FIRST slide MUST be an introduction/title slide.
+4. The LAST slide MUST be a summary/key takeaways slide.
+5. Create a descriptive \`image_prompt\` for an AI image generator to produce a slide background or visual.
+
+Always return exactly this JSON format:
 {
   "title": "Presentation Title",
+  "summary": "Overall summary of the presentation",
+  "stats": {
+    "totalSlides": 6
+  },
   "slides": [
     {
+      "slideNumber": 1,
+      "slideType": "title|content|two-column|infographic|summary",
       "title": "Slide Title",
-      "points": ["Full detailed sentence 1", "Full detailed sentence 2", "..."],
+      "subtitle": "Optional subtitle",
+      "speakerNotes": "Detailed speaker notes",
+      "visualDescription": "Layout guidance",
+      "colorAccent": "#1E40AF",
+      "points": ["Short punchy point 1", "Short punchy point 2"],
       "image_prompt": "Visual description for AI image generation"
     }
   ]
@@ -72,13 +97,15 @@ Always return the result in this JSON format:
     const userPrompt = `USER REQUEST: "${topic}"
 
 ---
-CONTEXT & DEFAULTS (Use only if not overridden by the USER REQUEST above):
+You MUST follow the above USER REQUEST exactly. Ignore any system defaults if they conflict with the USER REQUEST.
+
+CONTEXT & DEFAULTS (Use only if not specified in the user request):
 - Target Slide Count: ${numSlides}
 - Target Style: ${style}
-- Content Quality: Each slide should have 4-6 high-value, fact-based bullet points.
-- Images: Each slide needs a descriptive image_prompt for SDXL (subject, lighting, photorealistic).
+- Content Quality: Keep bullets under 8 words! Focus on high-value, impact-driven points.
+- Images: Each slide needs a strong, vivid \`image_prompt\` (style: photorealistic, 4k, clean composition) for our image AI.
 
-FINAL REMINDER: Follow the USER REQUEST above first and foremost.`;
+FINAL REMINDER: Follow the USER REQUEST above first and foremost, and return ONLY valid JSON matching the exact schema.`;
 
     try {
         const response = await axios.post(
@@ -348,7 +375,14 @@ async function assemblePPT(
             });
 
             // Subtitle / Key themes
-            if (slideData.points.length > 0) {
+            if (slideData.subtitle) {
+                slide.addText(slideData.subtitle, {
+                    x: 1.5, y: 3.8, w: 10, h: 1.2,
+                    fontSize: 20, fontFace: "Arial",
+                    color: C.subtext, align: "center",
+                    lineSpacingMultiple: 1.4,
+                });
+            } else if (slideData.points && slideData.points.length > 0) {
                 const subtitle = slideData.points.slice(0, 3).join("  •  ");
                 slide.addText(subtitle, {
                     x: 1.5, y: 3.8, w: 10, h: 1.2,
@@ -395,24 +429,35 @@ async function assemblePPT(
             });
 
             // Bullet points — detailed content
-            const bullets = slideData.points.map((point, idx) => ({
-                text: point,
-                options: {
-                    fontSize: 14,
-                    fontFace: "Arial" as const,
-                    color: C.text,
-                    bullet: { type: "bullet" as const, color: C.bulletAccent },
-                    breakType: "none" as const,
-                    paraSpaceAfter: 10,
-                    lineSpacingMultiple: 1.3,
-                },
-            }));
+            const pointsToRender = slideData.points || [];
+            if (pointsToRender.length > 0) {
+                const bullets = pointsToRender.map((point, idx) => ({
+                    text: point,
+                    options: {
+                        fontSize: 14,
+                        fontFace: "Arial" as const,
+                        color: C.text,
+                        bullet: { type: "bullet" as const, color: C.bulletAccent },
+                        breakType: "none" as const,
+                        paraSpaceAfter: 10,
+                        lineSpacingMultiple: 1.3,
+                    },
+                }));
 
-            slide.addText(bullets, {
-                x: 0.8, y: 1.7,
-                w: contentWidth - 0.8, h: 5,
-                valign: "top",
-            });
+                slide.addText(bullets, {
+                    x: 0.8, y: 1.7,
+                    w: contentWidth - 0.8, h: 5,
+                    valign: "top",
+                });
+            } else if (slideData.speakerNotes) {
+                // Fallback to speaker notes if no points
+                slide.addText(slideData.speakerNotes, {
+                    x: 0.8, y: 1.7,
+                    w: contentWidth - 0.8, h: 5,
+                    fontSize: 16, fontFace: "Arial", color: C.text,
+                    valign: "top",
+                });
+            }
 
             // Image on right side (separate, not background) — if available and it's a content slide
             if (hasImage) {
