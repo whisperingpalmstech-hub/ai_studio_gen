@@ -16,7 +16,7 @@ const COMFYUI_URL = process.env.COMFYUI_URL || 'http://127.0.0.1:8188';
 const GROK_API_KEY = process.env.GROK_API_KEY || process.env.GROQ_API_KEY;
 
 // Enterprise Grade: Absolute path to ComfyUI input folder
-const COMFYUI_INPUT_DIR = '/media/sujeetnew/4TB HDD/AiModels/ComfyUI/input';
+const COMFYUI_INPUT_DIR = '/media/sujeetnew/4TB HDD1/AiModels/ComfyUI/input';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("❌ Missing Supabase configuration. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.");
